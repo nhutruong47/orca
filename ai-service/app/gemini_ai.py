@@ -821,19 +821,30 @@ def _generate_json_object_with_gemini_api(prompt: str, max_output_tokens: int, e
     }
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_model}:generateContent"
-    try:
-        response = httpx.post(
-            url,
-            params={"key": settings.gemini_api_key},
-            json=payload,
-            timeout=settings.gemini_timeout_seconds,
-        )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        body = exc.response.text[:1000]
-        raise error_cls(f"Gemini API returned HTTP {exc.response.status_code}: {body}") from exc
-    except httpx.RequestError as exc:
-        raise error_cls(f"Cannot reach Gemini API: {exc}") from exc
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = httpx.post(
+                url,
+                params={"key": settings.gemini_api_key},
+                json=payload,
+                timeout=settings.gemini_timeout_seconds,
+            )
+            response.raise_for_status()
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in {429, 503} and attempt < max_retries - 1:
+                import time
+                time.sleep(2)
+                continue
+            body = exc.response.text[:1000]
+            raise error_cls(f"Gemini API returned HTTP {exc.response.status_code}: {body}") from exc
+        except httpx.RequestError as exc:
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(2)
+                continue
+            raise error_cls(f"Cannot reach Gemini API: {exc}") from exc
 
     raw_text = _read_gemini_text(response.json(), error_cls)
     return _parse_json_object(raw_text, error_cls)
