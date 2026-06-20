@@ -392,6 +392,11 @@ def _normalize_revise_output(draft: PlanDraftResponse, request: ReviseRequest) -
                     draft.tasks[index].priority = 5
             return draft
 
+    draft.goalTitle = original.goalTitle
+    draft.outputTarget = original.outputTarget
+    draft.deadline = original.deadline
+    draft.priority = original.priority
+    draft.tasks = [task.model_copy(deep=True) for task in original.tasks]
     return draft
 
 
