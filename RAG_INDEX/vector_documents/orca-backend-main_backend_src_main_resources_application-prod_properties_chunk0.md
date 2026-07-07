@@ -1,0 +1,79 @@
+# Knowledge Document: application-prod.properties (Chunk 1/1)
+
+## Metadata
+```json
+{
+  "file_path": "orca-backend-main/backend/src/main/resources/application-prod.properties",
+  "language": "properties",
+  "module": "resources",
+  "business_domain": "security",
+  "tags": [
+    "security"
+  ],
+  "logical_type": "Generic",
+  "chunk_index": 0,
+  "total_chunks": 1
+}
+```
+
+## Semantic Context
+- **Purpose**: Implementation chunk of Generic in resources.
+- **Dependencies**: Refer to module imports.
+- **Tags**: security
+
+## Source Code Chunk
+```properties
+# ===== Database (PostgreSQL trên Neon.tech) =====
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.datasource.hikari.maximum-pool-size=${DB_POOL_SIZE:5}
+
+# ===== JPA / Hibernate =====
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.use_nationalized_character_data=false
+spring.jpa.open-in-view=false
+
+# ===== JWT =====
+app.jwt.secret=${JWT_SECRET:bXlTdXBlclNlY3JldEtleUZvckpXVF9QbGVhc2VDaGFuZ2VJblByb2R1Y3Rpb25fQXRMZWFzdDI1NkJpdHMhIQ==}
+app.jwt.expiration=86400000
+
+# ===== Google OAuth2 =====
+spring.security.oauth2.client.registration.google.client-id=${GOOGLE_CLIENT_ID}
+spring.security.oauth2.client.registration.google.client-secret=${GOOGLE_CLIENT_SECRET}
+spring.security.oauth2.client.registration.google.scope=email,profile
+
+# ===== Mail / SMTP =====
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
+spring.mail.test-connection=false
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.starttls.required=true
+spring.mail.properties.mail.smtp.connectiontimeout=5000
+spring.mail.properties.mail.smtp.timeout=5000
+
+# ===== Cấu hình Mạng =====
+server.port=${PORT:8080}
+
+# ===== Frontend URL (cho OAuth2 redirect) =====
+app.frontend.url=${FRONTEND_URL:http://localhost:5173}
+
+# ===== AI Service =====
+ai.service.api-key=${AI_SERVICE_API_KEY:}
+ai.v2.service-url=${AI_V2_SERVICE_URL:http://127.0.0.1:8000}
+
+# Fix Neon.tech pgBouncer cached plan error
+spring.datasource.hikari.data-source-properties.prepareThreshold=0
+
+# ===== PayOS =====
+payos.client-id=${PAYOS_CLIENT_ID}
+payos.api-key=${PAYOS_API_KEY}
+payos.checksum-key=${PAYOS_CHECKSUM_KEY}
+
+```

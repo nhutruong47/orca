@@ -1,0 +1,91 @@
+# Knowledge Document: application.properties (Chunk 1/2)
+
+## Metadata
+```json
+{
+  "file_path": "orca-backend-main/backend/src/main/resources/application.properties",
+  "language": "properties",
+  "module": "resources",
+  "business_domain": "admin",
+  "tags": [
+    "admin",
+    "payment",
+    "security"
+  ],
+  "logical_type": "Generic",
+  "chunk_index": 0,
+  "total_chunks": 2
+}
+```
+
+## Semantic Context
+- **Purpose**: Implementation chunk of Generic in resources.
+- **Dependencies**: Refer to module imports.
+- **Tags**: admin, payment, security
+
+## Source Code Chunk
+```properties
+# ===== Server =====
+server.port=8080
+
+# ===== Database (PostgreSQL) =====
+spring.datasource.url=${DB_URL:jdbc:postgresql://127.0.0.1:5432/orca_db}
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:123456}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# ===== H2 Console (Test profile only) =====
+spring.h2.console.enabled=false
+
+# ===== JPA / Hibernate =====
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=false
+spring.jpa.open-in-view=false
+
+
+# ===== JWT =====
+app.jwt.secret=${JWT_SECRET:bXlTdXBlclNlY3JldEtleUZvckpXVF9QbGVhc2VDaGFuZ2VJblByb2R1Y3Rpb25fQXRMZWFzdDI1NkJpdHMhIQ==}
+app.jwt.expiration=86400000
+
+# ===== Default Admin Account =====
+app.default-admin.username=admin
+app.default-admin.password=Admin@123
+app.default-admin.email=admin@orca.local
+app.default-admin.full-name=Administrator
+
+# ===== Google OAuth2 =====
+spring.security.oauth2.client.registration.google.client-id=${GOOGLE_CLIENT_ID:266410953763-49ksgr3m8m32caa1v43ekti8o7leumk3.apps.googleusercontent.com}
+spring.security.oauth2.client.registration.google.client-secret=${GOOGLE_CLIENT_SECRET:YOUR_GOOGLE_CLIENT_SECRET_HERE}
+spring.security.oauth2.client.registration.google.scope=email,profile
+
+# ===== Mail / SMTP =====
+spring.mail.host=smtp.gmail.com
+mbbank.account-number=10212345678
+mbbank.account-name=ORCA PLATFORM
+mbbank.allow-manual-confirm=false
+spring.mail.port=587
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
+spring.mail.test-connection=false
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.starttls.required=true
+spring.mail.properties.mail.smtp.connectiontimeout=5000
+spring.mail.properties.mail.smtp.timeout=5000
+
+# ===== AI Microservice =====
+ai.service.api-key=${AI_SERVICE_API_KEY:}
+ai.v2.service-url=${AI_V2_SERVICE_URL:http://127.0.0.1:8000}
+
+# ===== VNPAY Sandbox =====
+app.frontend.url=http://localhost:5173
+vnpay.pay-url=${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+vnpay.tmn-code=${VNPAY_TMN_CODE:DEMOV210}
+vnpay.hash-secret=${VNPAY_HASH_SECRET:}
+vnpay.return-url=${VNPAY_RETURN_URL:http://localhost:8080/api/payments/vnpay/return}
+
+# ===== PayOS =====
+
+```

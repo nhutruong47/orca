@@ -1,0 +1,85 @@
+# Knowledge Document: AiWorkflowController.java (Chunk 1/2)
+
+## Metadata
+```json
+{
+  "file_path": "orca-backend-main/backend/src/main/java/org/example/backend/controller/AiWorkflowController.java",
+  "language": "java",
+  "module": "controller",
+  "business_domain": "payment",
+  "tags": [
+    "payment",
+    "security",
+    "authentication"
+  ],
+  "logical_type": "Controller",
+  "chunk_index": 0,
+  "total_chunks": 2
+}
+```
+
+## Semantic Context
+- **Purpose**: Implementation chunk of Controller in controller.
+- **Dependencies**: Refer to module imports.
+- **Tags**: payment, security, authentication
+
+## Source Code Chunk
+```java
+package org.example.backend.controller;
+
+import org.example.backend.dto.ai.AiExtractRequest;
+import org.example.backend.dto.ai.AiPlanRequest;
+import org.example.backend.dto.ai.AiReviseRequest;
+import org.example.backend.entity.User;
+import org.example.backend.service.AiWorkflowService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.example.backend.repository.UserRepository;
+import org.springframework.http.HttpStatus;
+
+@RestController
+@RequestMapping("/api/ai/v2")
+public class AiWorkflowController {
+
+    private final AiWorkflowService aiWorkflowService;
+    private final UserRepository userRepository;
+
+    public AiWorkflowController(AiWorkflowService aiWorkflowService, UserRepository userRepository) {
+        this.aiWorkflowService = aiWorkflowService;
+        this.userRepository = userRepository;
+    }
+
+    private void enforceAndIncrementUsage(User user) {
+        if (!user.isAiTrialActive()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.PAYMENT_REQUIRED,
+                    "Hết hạn gói miễn phí. Bạn cần nâng cấp gói để sử dụng tốt hơn."
+            );
+        }
+        int limit = 10;
+        if ("enterprise".equalsIgnoreCase(user.getAiPlan())) {
+            limit = Integer.MAX_VALUE;
+        } else if ("professional".equalsIgnoreCase(user.getAiPlan()) || "plus".equalsIgnoreCase(user.getAiPlan())) {
+            limit = 100;
+        }
+        int updated = userRepository.incrementAiUsageIfUnderLimit(user.getId(), limit);
+        if (updated == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.PAYMENT_REQUIRED,
+                    "Bạn đã đạt giới hạn sử dụng AI. Vui lòng nâng cấp gói dịch vụ."
+            );
+        }
+    }
+
+    @PostMapping("/extract")
+    public ResponseEntity<?> extract(@RequestBody AiExtractRequest request, @AuthenticationPrincipal User user) {
+        enforceAndIncrementUsage(user);
+        return ResponseEntity.ok(aiWorkflowService.extract(request, user));
+    }
+
+
+```
