@@ -1127,3 +1127,81 @@ def _parse_json_object(raw_text: str, error_cls: Type[RuntimeError]) -> dict:
     if not isinstance(parsed, dict):
         raise error_cls("Gemini output must be a JSON object.")
     return parsed
+
+
+def _call_gemini_text(prompt: str, max_output_tokens: int = 1024) -> str:
+    """Generic Gemini text completion used by non-JSON callers (RAG)."""
+    provider = settings.ai_provider.replace("-", "_")
+    if provider in {"vertex", "vertex_ai"}:
+        if not settings.vertex_project_id:
+            raise GeminiPlanError("VERTEX_PROJECT_ID is required when AI_PROVIDER=vertex.")
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "topP": 0.9,
+                "maxOutputTokens": max_output_tokens,
+            },
+        }
+        model_name = _vertex_model_name()
+        url = f"https://{_vertex_service_endpoint()}/v1/{model_name}:generateContent"
+        try:
+            response = httpx.post(
+                url,
+                headers={"Authorization": f"Bearer {_vertex_access_token(GeminiPlanError)}"},
+                json=payload,
+                timeout=settings.gemini_timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise GeminiPlanError(
+                f"Vertex AI returned HTTP {exc.response.status_code}: {exc.response.text[:1000]}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise GeminiPlanError(f"Cannot reach Vertex AI: {exc}") from exc
+        return _read_gemini_text(response.json(), GeminiPlanError)
+
+    if not settings.gemini_api_key:
+        raise GeminiPlanError("GEMINI_API_KEY is required when AI_PROVIDER=gemini_api.")
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "topP": 0.9,
+            "maxOutputTokens": max_output_tokens,
+        },
+    }
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{settings.gemini_model}:generateContent"
+    )
+    max_retries = 3
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            response = httpx.post(
+                url,
+                params={"key": settings.gemini_api_key},
+                json=payload,
+                timeout=settings.gemini_timeout_seconds,
+            )
+            response.raise_for_status()
+            return _read_gemini_text(response.json(), GeminiPlanError)
+        except httpx.HTTPStatusError as exc:
+            last_exc = exc
+            if exc.response.status_code in {429, 503} and attempt < max_retries - 1:
+                import time
+                time.sleep(2 ** attempt)
+                continue
+            raise GeminiPlanError(
+                f"Gemini API returned HTTP {exc.response.status_code}: {exc.response.text[:1000]}"
+            ) from exc
+        except httpx.RequestError as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(2 ** attempt)
+                continue
+            raise GeminiPlanError(f"Cannot reach Gemini API: {exc}") from exc
+
+    raise GeminiPlanError(f"Gemini API call failed: {last_exc}")

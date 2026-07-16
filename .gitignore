@@ -45,9 +45,58 @@ logs/
 Thumbs.db
 .idea/
 .vscode/*
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Secrets / credentials
+*service-account*.json
+*credentials*.json
+*client-secret*.json
+gen-lang-client-*.json
+test_gemini.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+.dev_pid
+
+# Java / Maven
+target/
+.mvn/timing.properties
+
+# Local database
+data/
+*.db
+*.mv.db
+*.trace.db
+
+# Logs
+logs/
+*.log
+*.err
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
 !.vscode/extensions.json
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.venv-test/
+.orca_ai_state/

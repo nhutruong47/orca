@@ -16,5 +16,13 @@ class Settings:
     vertex_location: str = os.getenv("VERTEX_LOCATION", "us-central1")
     vertex_model: str = os.getenv("VERTEX_MODEL", "gemini-2.0-flash")
 
+    # Comma-separated list of allowed origins for CORS.
+    # Empty => use the local-development defaults defined in main.py.
+    cors_allowed_origins: str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+
+    # Storage directory used by the file-backed vector store and the
+    # in-process conversation history.
+    storage_dir: str = os.getenv("ORCA_AI_STORAGE_DIR", "./.orca_ai_state")
+
 
 settings = Settings()

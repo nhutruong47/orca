@@ -1,0 +1,61 @@
+{
+  "version": "2026.07",
+  "items": [
+    {
+      "id": "manual-roast-overview",
+      "title": "Tổng quan quy trình rang cà phê",
+      "category": "Quy trình rang",
+      "last_updated": "2026-07-01",
+      "content": "Quy trình rang cà phê chuẩn gồm 5 bước: (1) Chuẩn bị — kiểm tra máy rang, cân nguyên liệu, làm nóng máy ở 180°C; (2) Charge — đổ hạt vào, ghi nhận nhiệt độ charge; (3) Yellowing — quan sát màu vàng nhạt, nhiệt độ ~150°C; (4) First Crack — ghi nhận nhiệt độ và thời gian, đây là mốc quan trọng quyết định development time; (5) Drop — kết thúc rang, đổ ra khay làm nguội ngay. Mỗi mẻ rang nên ghi log: trọng lượng, charge temp, first crack temp/time, drop temp, total time."
+    },
+    {
+      "id": "manual-roast-levels",
+      "title": "Các mức rang cà phê phổ biến",
+      "category": "Quy trình rang",
+      "last_updated": "2026-06-20",
+      "content": "Light (Rang nhạt): First Crack + 0-2 phút, hạt có vị chua rõ, body nhẹ. Medium (Rang vừa): First Crack + 2-3 phút, cân bằng giữa chua và đắng. Medium-Dark: First Crack + 3-4 phút, bắt đầu có vị caramel. Dark: First Crack + 4-6 phút, vị đắng đậm, ít chua. French: Sau Second Crack, đắng gắt, dầu nhiều."
+    },
+    {
+      "id": "manual-qc-checklist",
+      "title": "Checklist kiểm tra chất lượng (QC) sau rang",
+      "category": "Kiểm tra chất lượng",
+      "last_updated": "2026-07-05",
+      "content": "Trước khi xuất kho: (1) Đo độ ẩm — mục tiêu 11-13%; (2) Kiểm tra ngoại quan — hạt đều màu, không cháy, không sót hạt xanh; (3) Đo kích thước rang — sàng lọc bỏ hạt quá nhỏ; (4) Cupping test — đánh giá hương vị với 3-5 mẫu; (5) Ghi log kết quả vào hệ thống ORCA kèm mẻ rang. Nếu lô hàng không đạt ≥80% tiêu chuẩn, đánh dấu QC_FAIL và quay lại đánh giá nguyên nhân."
+    },
+    {
+      "id": "manual-packaging",
+      "title": "Quy trình đóng gói thành phẩm",
+      "category": "Đóng gói",
+      "last_updated": "2026-06-28",
+      "content": "Quy trình đóng gói 8 bước: (1) Đợi hạt nguội hoàn toàn (≤30°C); (2) Cân định lượng theo đơn; (3) Dùng túi có van thoát khí (valve bag) cho cà phê rang nguyên hạt; (4) Hút chân không trước khi gắn valve; (5) In nhãn theo mẫu (tên sản phẩm, trọng lượng, ngày rang, hạn dùng); (6) Dán tem chống giả; (7) Đóng thùng carton có đệm; (8) Cập nhật tồn kho trên ORCA."
+    },
+    {
+      "id": "manual-storage",
+      "title": "Bảo quản nguyên liệu và thành phẩm",
+      "category": "Kho",
+      "last_updated": "2026-06-15",
+      "content": "Nguyên liệu (hạt xanh): bảo quản nơi khô ráo, nhiệt độ 18-22°C, độ ẩm <60%, dùng bao GrainPro hoặc thùng kín. Hạn dùng: 12 tháng kể từ ngày thu hoạch. Thành phẩm (sau rang): dùng trong 4 tuần để giữ hương vị tối ưu; bảo quản kín, tránh ánh sáng, nhiệt độ <25°C. Không để tủ đông trừ khi cần trữ dài hạn (>3 tháng)."
+    },
+    {
+      "id": "manual-daily-board",
+      "title": "Hướng dẫn dùng Bảng sản xuất hằng ngày",
+      "category": "Vận hành",
+      "last_updated": "2026-07-08",
+      "content": "Bảng sản xuất hằng ngày (Daily Board) hiển thị: sản lượng mục tiêu, sản lượng thực tế, tỉ lệ hoàn thành, các task đang chạy và task quá hạn. Mỗi ca sản xuất cần cập nhật sản lượng thực tế ít nhất 2 lần (giữa ca và cuối ca). Nếu sản lượng thực tế thấp hơn 70% mục tiêu, hệ thống sẽ cảnh báo để kịp điều chỉnh nhân sự hoặc máy móc."
+    },
+    {
+      "id": "manual-inventory-import",
+      "title": "Nhập kho hàng loạt từ file",
+      "category": "Kho",
+      "last_updated": "2026-06-30",
+      "content": "Trong trang chi tiết team → Kho → nhấn 'Nhập từ file'. Hỗ trợ định dạng .xlsx và .csv với các cột bắt buộc: productType, productState, quantity, unit. Hệ thống sẽ tự động khớp với sản phẩm hiện có hoặc tạo mới nếu chưa có. Sau khi nhập, kho sẽ được AI lập tức cập nhật để phục vụ các truy vấn RAG tiếp theo."
+    },
+    {
+      "id": "manual-onboarding",
+      "title": "Hướng dẫn onboarding cho thành viên mới",
+      "category": "Vận hành",
+      "last_updated": "2026-07-02",
+      "content": "Quy trình onboarding 4 bước: (1) Chủ team vào 'Thành viên' → 'Mời' → nhập email và phân quyền; (2) Người được mời nhận email, nhấn link để tạo tài khoản; (3) Sau khi đăng nhập, họ vào trang 'Workforce' để cập nhật nhãn công việc (job labels); (4) Chủ team phân task đầu tiên qua AI Assistant để thành viên làm quen với workflow."
+    }
+  ]
+}
