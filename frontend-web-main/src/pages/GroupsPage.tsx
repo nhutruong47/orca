@@ -110,20 +110,21 @@ export default function GroupsPage() {
     event.preventDefault();
     const code = inviteCode.trim().toUpperCase();
     if (!code) {
-      setError('Nhap ma moi.');
+      setError('Vui lòng nhập mã mời.');
       return;
     }
 
     setSaving(true);
     setError('');
     try {
-      const joined = await teamService.joinByCode(code);
-      setGroups(current => [joined, ...current.filter(group => group.id !== joined.id)]);
+      const res: any = await teamService.joinByCode(code);
       setShowJoinModal(false);
       setInviteCode('');
-      navigate(`/groups/${joined.id}`);
+      alert(res?.teamName 
+        ? `🎉 Yêu cầu tham gia xưởng "${res.teamName}" đã được gửi thành công!\n\nVui lòng chờ Trưởng nhóm (Owner) phê duyệt yêu cầu của bạn.`
+        : '🎉 Yêu cầu tham gia xưởng đã được gửi thành công!\n\nVui lòng chờ Trưởng nhóm phê duyệt.');
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.response?.data?.message || 'Khong the tham gia nhom bang ma nay.');
+      setError(err?.response?.data?.error || err?.response?.data?.message || 'Không thể tham gia nhóm bằng mã này.');
     } finally {
       setSaving(false);
     }
@@ -137,7 +138,7 @@ export default function GroupsPage() {
     setError('');
     
     try {
-      const res = await api.get(`/team-join/team/${group.id}/pending`);
+      const res = await api.get(`/api/team-join/team/${group.id}/pending`);
       setJoinRequests(res.data);
     } catch (err) {
       console.error('Failed to fetch join requests', err);
@@ -231,7 +232,7 @@ export default function GroupsPage() {
 
   const handleDecision = async (requestId: string, decision: 'APPROVED' | 'REJECTED') => {
     try {
-        await api.post(`/team-join/${requestId}/decision`, { decision });
+        await api.post(`/api/team-join/${requestId}/decision`, { decision });
         setJoinRequests(current => current.filter(r => r.id !== requestId));
         if (decision === 'APPROVED') {
             loadGroups();
@@ -621,8 +622,8 @@ export default function GroupsPage() {
                         {joinRequests.map(req => (
                             <li key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border-color)' }}>
                                 <div>
-                                    <div style={{ fontWeight: 600 }}>{req.userName}</div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{req.userEmail}</div>
+                                    <div style={{ fontWeight: 600 }}>{req.userName || req.userEmail || 'Thành viên mới'}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{req.userEmail || ''}</div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 5 }}>
                                     <button className="btn btn-primary" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => handleDecision(req.id, 'APPROVED')}>Duyệt</button>

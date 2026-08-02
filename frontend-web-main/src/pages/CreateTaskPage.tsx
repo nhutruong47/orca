@@ -19,6 +19,18 @@ interface ChatMessage {
     isArchived?: boolean;
 }
 
+type AiConversationMode = 'IDLE' | 'WAITING_CLARIFICATION' | 'DRAFT_READY';
+
+interface AiConversationState {
+    mode: AiConversationMode;
+    originalText?: string;
+    intent?: 'PRODUCTION_PLAN' | 'OPERATION_TASK' | 'UNKNOWN';
+    previousFields?: Record<string, any>;
+    missingFields?: string[];
+}
+
+const idleConversation: AiConversationState = { mode: 'IDLE' };
+
 const priorityLabel = (priority: number) => {
     if (priority >= 4) return 'high';
     if (priority <= 1) return 'low';
@@ -236,6 +248,20 @@ export default function CreateTaskPage() {
         }
         return [];
     });
+    const [conversationState, setConversationState] = useState<AiConversationState>(() => {
+        try {
+            const pathSegments = window.location.pathname.split('/');
+            const idx = pathSegments.indexOf('groups');
+            const tid = idx >= 0 && idx + 1 < pathSegments.length ? pathSegments[idx + 1] : null;
+            if (tid) {
+                const saved = localStorage.getItem(`ai_task_state_${tid}`);
+                if (saved) return JSON.parse(saved);
+            }
+        } catch (e) {
+            // fallback idle
+        }
+        return idleConversation;
+    });
     const [loading, setLoading] = useState(false);
     const [trialActive, setTrialActive] = useState(true);
     const [trialDays, setTrialDays] = useState(30);
@@ -297,6 +323,15 @@ export default function CreateTaskPage() {
         }
     }, [messages, teamId]);
 
+    useEffect(() => {
+        if (!teamId) return;
+        if (conversationState.mode === 'IDLE') {
+            localStorage.removeItem(`ai_task_state_${teamId}`);
+        } else {
+            localStorage.setItem(`ai_task_state_${teamId}`, JSON.stringify(conversationState));
+        }
+    }, [conversationState, teamId]);
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -308,8 +343,10 @@ export default function CreateTaskPage() {
     const clearHistory = () => {
         if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện này?')) {
             setMessages([]);
+            setConversationState(idleConversation);
             if (teamId) {
                 localStorage.removeItem(`ai_task_chat_${teamId}`);
+                localStorage.removeItem(`ai_task_state_${teamId}`);
             }
         }
     };
@@ -381,6 +418,7 @@ export default function CreateTaskPage() {
                     result: res,
                     timestamp: new Date()
                 };
+                setConversationState({ mode: 'DRAFT_READY' });
                 setMessages(prev => [
                     ...prev.map(message =>
                         message.id === activeDraftMessage?.id
@@ -392,9 +430,26 @@ export default function CreateTaskPage() {
                 return;
             }
 
-            const extracted = await aiWorkflowService.extract(teamId || '', userMsg.content);
+            const extractContext = conversationState.mode === 'WAITING_CLARIFICATION'
+                ? {
+                    mode: conversationState.mode,
+                    originalText: conversationState.originalText || userMsg.content,
+                    intent: conversationState.intent,
+                    previousFields: conversationState.previousFields,
+                    missingFields: conversationState.missingFields
+                }
+                : undefined;
+
+            const extracted = await aiWorkflowService.extract(teamId || '', userMsg.content, extractContext);
 
             if (extracted.intent === 'UNKNOWN' || extracted.missingFields?.length > 0) {
+                setConversationState({
+                    mode: 'WAITING_CLARIFICATION',
+                    originalText: conversationState.originalText || userMsg.content,
+                    intent: extracted.intent,
+                    previousFields: extracted.fields || {},
+                    missingFields: extracted.missingFields || []
+                });
                 const aiMsg: ChatMessage = {
                     id: Date.now().toString() + '-ai',
                     role: 'assistant',
@@ -407,6 +462,7 @@ export default function CreateTaskPage() {
 
             const draft = await aiWorkflowService.plan(teamId || '', extracted.intent, extracted.fields);
             const res = draftToResult(draft);
+            setConversationState({ mode: 'DRAFT_READY' });
 
             const aiMsg: ChatMessage = {
                 id: Date.now().toString() + '-ai',

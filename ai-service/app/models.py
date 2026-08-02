@@ -1,4 +1,4 @@
-from typing import Any, Literal
+﻿from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -7,9 +7,18 @@ Intent = Literal["PRODUCTION_PLAN", "OPERATION_TASK", "UNKNOWN"]
 PriorityText = Literal["LOW", "MEDIUM", "HIGH"]
 
 
+class ExtractContext(BaseModel):
+    mode: Literal["WAITING_CLARIFICATION"]
+    originalText: str | None = None
+    intent: Intent | None = None
+    previousFields: dict[str, Any] = Field(default_factory=dict)
+    missingFields: list[str] = Field(default_factory=list)
+
+
 class ExtractRequest(BaseModel):
     teamId: str | None = None
     text: str = Field(min_length=1)
+    context: ExtractContext | None = None
 
 
 class ExtractResponse(BaseModel):
@@ -57,3 +66,4 @@ class ReviseRequest(BaseModel):
     instruction: str = Field(min_length=1)
     draft: PlanDraftResponse
     members: list[TeamMemberContext] = Field(default_factory=list)
+
