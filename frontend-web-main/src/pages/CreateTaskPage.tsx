@@ -404,6 +404,19 @@ export default function CreateTaskPage() {
                 const localRevision = applyDeterministicRevision(userMsg.content, currentDraft);
                 const apiDraft = localRevision
                     || await aiWorkflowService.revise(teamId || '', userMsg.content, currentDraft);
+
+                // If AI couldn't process the revision, show the friendly aiNote message
+                if (!localRevision && apiDraft.aiNote) {
+                    const aiNoteMsg: ChatMessage = {
+                        id: Date.now().toString() + '-ai',
+                        role: 'assistant',
+                        content: apiDraft.aiNote,
+                        timestamp: new Date()
+                    };
+                    setMessages(prev => [...prev, aiNoteMsg]);
+                    return;
+                }
+
                 const revisedDraft = localRevision
                     || ensureRequestedRevision(userMsg.content, currentDraft, apiDraft);
                 const res = draftToResult(revisedDraft);
@@ -473,16 +486,32 @@ export default function CreateTaskPage() {
             };
             setMessages(prev => [...prev, aiMsg]);
         } catch (e: any) {
-            const msgStr = e?.response?.data?.message || e?.response?.data?.error || e.message || 'Lỗi kết nối AI. Hãy thử lại!';
             if (isPaymentRequiredError(e)) {
                 setTrialActive(false);
                 window.dispatchEvent(new CustomEvent('payment-required'));
                 return;
             }
+
+            const raw = e?.response?.data?.message || e?.response?.data?.detail || e?.response?.data?.error || e?.message || '';
+            const rawLower = String(raw).toLowerCase();
+            const status = e?.response?.status;
+
+            let friendlyMsg = 'Hệ thống gặp gián đoạn tạm thời. Bạn thử gửi lại yêu cầu giúp ORCA nhé!';
+
+            if (status === 502 || status === 503 || rawLower.includes('bad gateway') || rawLower.includes('cannot reach ai') || rawLower.includes('gemini')) {
+                friendlyMsg = 'Hệ thống AI đang bận hoặc gián đoạn tạm thời. Bạn chờ vài giây rồi gửi lại giúp ORCA nhé!';
+            } else if (status === 500 || rawLower.includes('internal server error')) {
+                friendlyMsg = 'Hệ thống gặp sự cố kỹ thuật tạm thời. Vui lòng thử lại sau giây lát!';
+            } else if (rawLower.includes('network') || rawLower.includes('failed to fetch') || rawLower.includes('econnrefused')) {
+                friendlyMsg = 'Không thể kết nối đến máy chủ. Bạn kiểm tra lại đường truyền mạng giúp ORCA nhé!';
+            } else if (raw && !rawLower.includes('exception') && !rawLower.includes('http') && !rawLower.includes('502') && !rawLower.includes('500') && !rawLower.includes('json')) {
+                friendlyMsg = raw;
+            }
+
             const errorMsg: ChatMessage = {
                 id: Date.now().toString() + '-err',
                 role: 'assistant',
-                content: msgStr,
+                content: friendlyMsg,
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, errorMsg]);

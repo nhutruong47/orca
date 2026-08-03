@@ -279,7 +279,9 @@ export interface AiV2PlanDraft {
     deadline?: string | null;
     priority: number;
     tasks: AiV2TaskDraft[];
+    aiNote?: string | null; // Present when AI cannot process the revision; frontend should display this instead of updating the draft
 }
+
 
 export const aiWorkflowService = {
     extract: (teamId: string, text: string, context?: AiV2ExtractContext) =>

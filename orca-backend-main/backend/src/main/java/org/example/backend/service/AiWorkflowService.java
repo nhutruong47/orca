@@ -62,13 +62,13 @@ public class AiWorkflowService {
         try {
             T response = restTemplate.postForObject(aiServiceUrl + path, body, responseType);
             if (response == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI service returned empty response");
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Dịch vụ AI phản hồi rỗng, vui lòng thử lại sau.");
             }
             return response;
         } catch (ResponseStatusException e) {
             throw e;
         } catch (RestClientException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Cannot reach AI service: " + e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Dịch vụ AI đang gián đoạn tạm thời. Vui lòng thử lại sau.", e);
         }
     }
 

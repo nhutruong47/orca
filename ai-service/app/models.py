@@ -1,4 +1,4 @@
-﻿from typing import Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -59,6 +59,8 @@ class PlanDraftResponse(BaseModel):
     deadline: str | None = None
     priority: int = Field(ge=1, le=5)
     tasks: list[TaskDraft]
+    aiNote: str | None = None  # Set when AI cannot process the request; frontend should show this instead of updating draft
+
 
 
 class ReviseRequest(BaseModel):
