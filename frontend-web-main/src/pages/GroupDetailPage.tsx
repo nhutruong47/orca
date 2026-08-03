@@ -120,6 +120,7 @@ export default function GroupDetailPage() {
     // Inventory
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
     const [showAddInventory, setShowAddInventory] = useState(false);
+    const [showInventory, setShowInventory] = useState(false);
     const [showStockIn, setShowStockIn] = useState(false);
     const [stockInItemId, setStockInItemId] = useState('');
     const [stockInQty, setStockInQty] = useState('');
@@ -1641,24 +1642,33 @@ export default function GroupDetailPage() {
             {/* ===== BẢNG KHO HÀNG (INVENTORY) ===== */}
             {isAdmin && (
             <div style={{ background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border)', overflow: 'hidden', marginBottom: 18 }}>
-                <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}><ion-icon name="cube-outline" style={{ fontSize: 18, verticalAlign: 'middle', marginRight: 6, color: '#d4a574' }}></ion-icon> KHO HÀNG ({inventoryItems.length})</h3>
-                    {isAdmin && (
-                        <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ padding: '16px 24px', borderBottom: showInventory ? '1px solid var(--border)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}><ion-icon name="cube-outline" style={{ fontSize: 18, verticalAlign: 'middle', marginRight: 6, color: '#d4a574' }}></ion-icon> KHO HÀNG ({inventoryItems.length})</h3>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>Quản lý nguyên liệu và thành phẩm</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        {isAdmin && (
                             <button onClick={() => setShowStockIn(true)} style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <ion-icon name="add-circle"></ion-icon> Nhập kho
                             </button>
-                            <button onClick={() => setShowAddInventory(true)} style={{ background: '#b97820', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <ion-icon name="add"></ion-icon> Thêm sản phẩm
-                            </button>
-                        </div>
-                    )}
+                        )}
+                        <button onClick={() => setShowInventory(p => !p)} style={{
+                            background: 'transparent',
+                            color: 'var(--text-secondary)',
+                            border: 'none',
+                            padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 4,
+                        }}>
+                            {showInventory ? 'Ẩn bảng' : 'Xem chi tiết'}
+                            <ion-icon name={showInventory ? "chevron-up-outline" : "chevron-down-outline"}></ion-icon>
+                        </button>
+                    </div>
                 </div>
 
-
-
-                {/* Table */}
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                {showInventory && (
+                    <div style={{ borderTop: '1px solid var(--border)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ background: 'transparent' }}>
                             {['Tên mặt hàng', 'Tình trạng', 'Số lượng', 'Cập nhật', ''].map((h, i) => (
@@ -1675,7 +1685,6 @@ export default function GroupDetailPage() {
                                     <p style={{ fontSize: 14, marginBottom: 24 }}>Khi bạn nhập kho hoặc tạo sản phẩm mới, dữ liệu sẽ xuất hiện tại đây.</p>
                                     <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                                         <button onClick={() => setShowStockIn(true)} style={{ background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>+ Nhập kho</button>
-                                        <button onClick={() => setShowAddInventory(true)} style={{ background: 'var(--bg-input)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
                                     </div>
                                 </td>
                             </tr>
@@ -1716,6 +1725,8 @@ export default function GroupDetailPage() {
                         })}
                     </tbody>
                 </table>
+                </div>
+                )}
             </div>
             )}
 
@@ -2283,8 +2294,17 @@ export default function GroupDetailPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                             <div>
                                 <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Chọn hàng hóa <span style={{ color: '#dc2626' }}>*</span></label>
-                                <select value={stockInItemId} onChange={e => setStockInItemId(e.target.value)} style={{ width: '100%', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border, #cbd5e1)', fontSize: 15, outline: 'none', background: 'var(--bg-input, #f8fafc)', color: 'var(--text-primary, #1a1a1a)' }}>
+                                <select value={stockInItemId} onChange={e => {
+                                    if(e.target.value === 'NEW_PRODUCT') {
+                                        setShowStockIn(false);
+                                        setShowAddInventory(true);
+                                        setStockInItemId('');
+                                    } else {
+                                        setStockInItemId(e.target.value);
+                                    }
+                                }} style={{ width: '100%', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border, #cbd5e1)', fontSize: 15, outline: 'none', background: 'var(--bg-input, #f8fafc)', color: 'var(--text-primary, #1a1a1a)' }}>
                                     <option value="">-- Chọn hàng hóa --</option>
+                                    <option value="NEW_PRODUCT" style={{ fontWeight: 'bold', color: '#b97820' }}>+ Tạo sản phẩm mới...</option>
                                     {inventoryItems.map(item => (
                                         <option key={item.id} value={item.id}>{item.displayName || item.name}</option>
                                     ))}

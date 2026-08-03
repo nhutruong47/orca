@@ -268,6 +268,7 @@ export default function CreateTaskPage() {
 
     const [showTokens, setShowTokens] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
     const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
     const totalTokens = messages.reduce((sum, message) => sum + estimateTokens(message.content), 0);
 
@@ -578,28 +579,56 @@ export default function CreateTaskPage() {
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isCancelled: true } : m));
     };
 
-    const handleRevertDraft = (result: AiParseResult) => {
-        const revertMsg: ChatMessage = {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: 'Dưới đây là bản nháp bạn muốn khôi phục. Bạn có thể chỉnh sửa và xác nhận lại:',
-            result: { ...result },
+    const handleRevertDraft = (historyMsgId: string) => {
+        setMessages(prev => {
+            return prev.map(message => {
+                if (message.id === historyMsgId) {
+                    return { ...message, isArchived: false };
+                }
+                if (message.result && !message.isConfirmed && !message.isCancelled) {
+                    return { ...message, isArchived: true };
+                }
+                return message;
+            });
+        });
+
+        setTimeout(() => {
+            const el = document.getElementById(`msg-${historyMsgId}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
+    };
+
+    const handleDuplicateDraft = (historyMsgId: string) => {
+        const sourceMsg = messages.find(m => m.id === historyMsgId);
+        if (!sourceMsg || !sourceMsg.result) return;
+        
+        const newMsg: ChatMessage = {
+            ...sourceMsg,
+            id: Date.now().toString() + '-dup',
+            isConfirmed: false,
+            isCancelled: false,
+            isArchived: false,
             timestamp: new Date()
         };
+        
         setMessages(prev => {
-            const activeMessage = findActiveDraftMessage(prev);
-            return [
-                ...prev.map(message =>
-                    message.id === activeMessage?.id
-                        ? { ...message, isArchived: true }
-                        : message
-                ),
-                revertMsg
-            ];
+            const archivedPrev = prev.map(m => {
+                if (m.result && !m.isConfirmed && !m.isCancelled) {
+                    return { ...m, isArchived: true };
+                }
+                return m;
+            });
+            return [...archivedPrev, newMsg];
         });
-        setShowHistory(false);
-        setSelectedHistoryId(null);
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        
+        setTimeout(() => {
+            const el = document.getElementById(`msg-${newMsg.id}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
     };
 
     const hasActiveDraft = Boolean(findActiveDraftMessage(messages)?.result);
@@ -669,19 +698,39 @@ export default function CreateTaskPage() {
                     display: none;
                 }
                 .task-gpt-page {
-                    min-height: 100vh;
-                    display: grid;
-                    grid-template-rows: auto minmax(0, 1fr) auto;
+                    height: 100vh;
+                    display: flex;
                     color: var(--text-primary);
                     background: var(--bg-primary);
                     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                    overflow: hidden;
+                }
+                .task-gpt-sidebar {
+                    width: ${sidebarOpen ? '260px' : '0px'};
+                    opacity: ${sidebarOpen ? 1 : 0};
+                    flex-shrink: 0;
+                    display: flex;
+                    flex-direction: column;
+                    background: var(--bg-secondary);
+                    border-right: ${sidebarOpen ? '1px solid var(--border)' : 'none'};
+                    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out;
+                    overflow: hidden;
+                    white-space: nowrap;
+                }
+                .task-gpt-content {
+                    flex: 1;
+                    display: grid;
+                    grid-template-rows: auto minmax(0, 1fr) auto;
+                    min-width: 0;
+                    position: relative;
                 }
                 .task-gpt-topbar {
-                    min-height: 56px;
-                    display: grid;
-                    grid-template-columns: 1fr auto;
+                    display: flex;
+                    justify-content: space-between;
                     align-items: center;
+                    min-height: 56px;
                     padding: 0 26px;
+                    background: var(--bg-primary);
                 }
                 .task-gpt-model {
                     display: inline-flex;
@@ -836,7 +885,7 @@ export default function CreateTaskPage() {
                     min-height: 74px;
                     margin: 0 auto;
                     display: grid;
-                    grid-template-columns: auto minmax(0, 1fr) auto auto;
+                    grid-template-columns: auto minmax(0, 1fr) auto;
                     align-items: end;
                     gap: 10px;
                     padding: 10px 12px 10px 16px;
@@ -875,6 +924,12 @@ export default function CreateTaskPage() {
                     font-size: 16px;
                     line-height: 1.5;
                 }
+                .task-gpt-textarea:focus,
+                .task-gpt-textarea:focus-visible {
+                    outline: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                }
                 .task-gpt-textarea::placeholder {
                     color: var(--text-muted);
                 }
@@ -889,6 +944,12 @@ export default function CreateTaskPage() {
                     border: 0;
                     font: inherit;
                     font-size: 14px;
+                }
+                .task-gpt-mode:focus,
+                .task-gpt-mode:focus-visible {
+                    outline: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
                 }
                 .task-gpt-send {
                     color: var(--bg-primary);
@@ -953,74 +1014,93 @@ export default function CreateTaskPage() {
                 }
             `}</style>
 
-            {showHistory && (
-                <div className="modal-overlay" onClick={() => setShowHistory(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
-                    <div className="history-panel" onClick={e => e.stopPropagation()} style={{ width: 400, maxWidth: '100%', background: '#fff', height: '100%', padding: '20px', display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 20px rgba(0,0,0,0.1)', overflowY: 'auto' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                                Lịch sử bản nháp ({draftMessages.length})
-                            </h2>
-                            <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#64748b' }}>
-                                <ion-icon name="close-outline"></ion-icon>
+            <aside className="task-gpt-sidebar">
+                <div style={{ padding: '16px' }}>
+                    <button
+                        type="button"
+                        onClick={() => { if(window.confirm('Bạn có muốn tạo công việc mới? Các nội dung chưa lưu có thể bị mất.')) { setMessages([]); setInput(''); } }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                        onMouseOver={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                        onMouseOut={e => e.currentTarget.style.background = 'var(--bg-primary)'}
+                    >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <ion-icon name="add-outline" style={{ fontSize: 18 }}></ion-icon>
+                            Tạo mới
+                        </span>
+                        <ion-icon name="create-outline" style={{ fontSize: 16 }}></ion-icon>
+                    </button>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', position: 'relative' }}>
+                    <div style={{ position: 'sticky', top: '-12px', background: 'var(--bg-secondary)', padding: '12px 0 12px 0', zIndex: 10, fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Gần đây <ion-icon name="time-outline"></ion-icon>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', height: '100%' }}>
+                        {draftMessages.length === 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '40px', opacity: 0.6, gap: '12px', padding: '0 10px', textAlign: 'center' }}>
+                                <ion-icon name="chatbox-ellipses-outline" style={{ fontSize: '36px' }}></ion-icon>
+                                <span style={{ fontSize: '13px', whiteSpace: 'normal', lineHeight: '1.4' }}>
+                                    Lịch sử đang trống.<br/>Hãy trò chuyện để tạo các bản nháp mới nhé.
+                                </span>
+                            </div>
+                        )}
+                        {draftMessages.map(msg => (
+                            <button
+                                key={msg.id}
+                                onClick={() => handleRevertDraft(msg.id)}
+                                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}
+                                className="task-gpt-suggestion"
+                                title={msg.result?.description || msg.content}
+                            >
+                                {msg.result?.title || msg.result?.description || msg.content}
                             </button>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {draftMessages.length === 0 ? (
-                                <p style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', marginTop: 40 }}>Chưa có bản nháp nào.</p>
-                            ) : (
-                                draftMessages.map(msg => (
-                                    <div key={msg.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, cursor: 'pointer', background: selectedHistoryId === msg.id ? '#f8fafc' : '#fff' }} onClick={() => setSelectedHistoryId(selectedHistoryId === msg.id ? null : msg.id)}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                            <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{msg.result?.title || 'Mục tiêu không tên'}</div>
-                                            <span style={{
-                                                fontSize: 11,
-                                                padding: '2px 8px',
-                                                borderRadius: 12,
-                                                background: msg.isConfirmed ? '#dcfce7' : msg.isCancelled ? '#fee2e2' : msg.isArchived ? '#ede9fe' : '#dbeafe',
-                                                color: msg.isConfirmed ? '#166534' : msg.isCancelled ? '#991b1b' : msg.isArchived ? '#6d28d9' : '#1d4ed8',
-                                                fontWeight: 600
-                                            }}>
-                                                {msg.isConfirmed ? 'Đã xác nhận' : msg.isCancelled ? 'Đã hủy' : msg.isArchived ? 'Bản trước' : 'Hiện tại'}
-                                            </span>
-                                        </div>
-                                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>{new Date(msg.timestamp).toLocaleString()}</div>
-                                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                                            {msg.result?.tasks?.length || 0} công việc
-                                        </div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                            {(msg.result?.tasks || []).map((task, index) => (
-                                                <span
-                                                    key={`${msg.id}-task-${index}`}
-                                                    style={{
-                                                        padding: '4px 8px',
-                                                        borderRadius: 999,
-                                                        background: '#f1f5f9',
-                                                        color: '#475569',
-                                                        fontSize: 11,
-                                                        lineHeight: 1.2
-                                                    }}
-                                                >
-                                                    {index + 1}. {task.title || task.description}
-                                                </span>
-                                            ))}
-                                        </div>
+                        ))}
+                    </div>
+                </div>
+            </aside>
 
-                                        {selectedHistoryId === msg.id && (
-                                            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 4 }}>
-                                                <div style={{ fontSize: 12, color: '#475569', marginBottom: 12 }}>
-                                                    <strong>Mô tả:</strong> {msg.result?.description || msg.content}
-                                                </div>
-                                                {msg.isArchived || msg.isConfirmed || msg.isCancelled ? (
-                                                    <button onClick={(e) => { e.stopPropagation(); handleRevertDraft(msg.result!); }} style={{ width: '100%', padding: '8px', background: '#b97820', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                                                        Tạo lại từ bản này
-                                                    </button>
-                                                ) : (
-                                                    <div style={{ width: '100%', padding: '8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
-                                                        Đây là bản đang sử dụng
-                                                    </div>
-                                                )}
+            <div className="task-gpt-content">
+                <header className="task-gpt-topbar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button className="task-gpt-action" type="button" onClick={() => setSidebarOpen(prev => !prev)} title="Đóng/Mở Sidebar">
+                            <ion-icon name="menu-outline"></ion-icon>
+                        </button>
+                        <button className="task-gpt-action" type="button" onClick={() => navigate(`/groups/${teamId}`)}>
+                            <ion-icon name="chevron-back-outline"></ion-icon>
+                            ORCA
+                        </button>
+                    </div>
+                    <div className="task-gpt-actions">
+                        <button className="task-gpt-action" type="button" onClick={() => setShowHistory(true)}>
+                            <ion-icon name="time-outline"></ion-icon>
+                            <span style={{ marginLeft: 4, fontWeight: 600 }}>Lịch sử</span>
+                        </button>
+                        <button className="task-gpt-action" type="button" onClick={() => setShowTokens(prev => !prev)}>
+                            <ion-icon name="ellipsis-horizontal"></ion-icon>
+                        </button>
+                    </div>
+                </header>
+
+            {showHistory && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: 'var(--bg-primary)', width: 600, maxWidth: '90%', maxHeight: '80%', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Lịch sử công việc đã xác nhận</h3>
+                            <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, color: 'var(--text-muted)' }}><ion-icon name="close-outline"></ion-icon></button>
+                        </div>
+                        <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+                            {messages.filter(m => hasDraftTasks(m.result) && m.isConfirmed).length === 0 ? (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0' }}>Chưa có bản ghi nào được xác nhận.</div>
+                            ) : (
+                                messages.filter(m => hasDraftTasks(m.result) && m.isConfirmed).map(msg => (
+                                    <div key={msg.id} style={{ marginBottom: 16, padding: 16, border: '1px solid var(--border)', borderRadius: 8 }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{msg.result?.title || msg.result?.description || msg.content}</div>
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+                                            <span>Xác nhận lúc: {msg.timestamp.toLocaleString()}</span>
+                                            <div style={{ display: 'flex', gap: 12 }}>
+                                                <button onClick={() => { handleRevertDraft(msg.id); setShowHistory(false); }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><ion-icon name="eye-outline"></ion-icon> Xem chi tiết</button>
+                                                <button onClick={() => { handleDuplicateDraft(msg.id); setShowHistory(false); }} style={{ background: 'none', border: 'none', color: '#b97820', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><ion-icon name="copy-outline"></ion-icon> Tạo lại</button>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 ))
                             )}
@@ -1028,23 +1108,6 @@ export default function CreateTaskPage() {
                     </div>
                 </div>
             )}
-
-            <header className="task-gpt-topbar">
-                <button className="task-gpt-action" type="button" onClick={() => navigate(`/groups/${teamId}`)}>
-                    <ion-icon name="chevron-back-outline"></ion-icon>
-                    ORCA
-                </button>
-                <div className="task-gpt-actions">
-                    <button className="task-gpt-action" type="button" onClick={() => setShowHistory(true)}>
-                        <ion-icon name="time-outline"></ion-icon>
-                        Lịch sử
-                    </button>
-
-                    <button className="task-gpt-action" type="button" onClick={() => setShowTokens(prev => !prev)}>
-                        <ion-icon name="ellipsis-horizontal"></ion-icon>
-                    </button>
-                </div>
-            </header>
 
 
 
@@ -1078,7 +1141,7 @@ export default function CreateTaskPage() {
                     ) : (
                         <>
                             {messages.map(msg => (
-                                <div key={msg.id} className={`task-gpt-message-row ${msg.role}`}>
+                                <div key={msg.id} id={`msg-${msg.id}`} className={`task-gpt-message-row ${msg.role}`}>
                                     <article className="task-gpt-bubble">
                                         {msg.role === 'assistant' && <div className="task-gpt-assistant-head">ORCA</div>}
                                         <div className="markdown-content">
@@ -1119,8 +1182,7 @@ export default function CreateTaskPage() {
                                                 <ion-icon name="copy-outline" onClick={() => handleCopyMessage(msg.content)} style={{ cursor: 'pointer' }} title="Copy"></ion-icon>
                                                 <ion-icon name="thumbs-up-outline" onClick={() => alert('Cảm ơn bạn đã đánh giá!')} style={{ cursor: 'pointer' }} title="Hữu ích"></ion-icon>
                                                 <ion-icon name="thumbs-down-outline" onClick={() => alert('Cảm ơn bạn đã đánh giá!')} style={{ cursor: 'pointer' }} title="Chưa tốt"></ion-icon>
-                                                <ion-icon name="refresh-outline" style={{ cursor: 'pointer' }} title="Thử lại"></ion-icon>
-                                                <ion-icon name="trash-outline" onClick={() => handleDeleteMessage(msg.id)} style={{ cursor: 'pointer', color: '#ef4444' }} title="Xóa đoạn chat này"></ion-icon>
+
                                                 {showTokens && <span className="task-gpt-token">{formatTokenCount(estimateTokens(msg.content))} token</span>}
                                             </div>
                                         )}
@@ -1159,10 +1221,6 @@ export default function CreateTaskPage() {
                         disabled={loading}
                         rows={1}
                     />
-                    <button className="task-gpt-mode" type="button">
-                        {hasActiveDraft ? 'Sửa draft' : 'Tạo draft'}
-                        <ion-icon name="chevron-down-outline"></ion-icon>
-                    </button>
                     <button
                         className="task-gpt-send"
                         type="button"
@@ -1173,8 +1231,8 @@ export default function CreateTaskPage() {
                         <ion-icon name={loading ? 'hourglass-outline' : 'arrow-up-outline'}></ion-icon>
                     </button>
                 </div>
-                <p className="task-gpt-disclaimer">Luồng AI v2: tạo draft, sửa trực tiếp trong ô chat, rồi lưu sau khi xem trước.</p>
             </footer>
+            </div>
         </div>
     );
 
