@@ -14,6 +14,16 @@ import {
     UserRoundCog,
     Store,
 } from 'lucide-react';
+import {
+    Bar,
+    BarChart,
+    CartesianGrid,
+    Cell,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { teamService, taskService, goalService } from '../services/groupService';
 import type { Task, Team, Goal } from '../types/types';
@@ -24,6 +34,49 @@ const teamImages = [
     'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=900&q=84',
     'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=900&q=84',
 ];
+
+interface TeamProductivityDatum {
+    id: string;
+    name: string;
+    productivity: number;
+    completedTasks: number;
+    totalTasks: number;
+}
+
+interface ProductivityTooltipProps {
+    active?: boolean;
+    payload?: Array<{ payload: TeamProductivityDatum }>;
+}
+
+function getTeamTaskProgress(goals: Goal[]) {
+    const totalTasks = goals.reduce((sum, goal) => sum + (goal.totalTasks || 0), 0);
+    const completedTasks = Math.min(
+        totalTasks,
+        goals.reduce((sum, goal) => sum + (goal.completedTasks || 0), 0),
+    );
+    const productivity = totalTasks > 0
+        ? Math.round((completedTasks / totalTasks) * 100)
+        : 0;
+
+    return { totalTasks, completedTasks, productivity };
+}
+
+function ProductivityTooltip({ active, payload }: ProductivityTooltipProps) {
+    const datum = payload?.[0]?.payload;
+    if (!active || !datum) return null;
+
+    return (
+        <div className="dashboard-productivity-tooltip">
+            <strong>{datum.name}</strong>
+            <span>{datum.productivity}% hoàn thành</span>
+            <small>
+                {datum.totalTasks > 0
+                    ? `${datum.completedTasks}/${datum.totalTasks} công việc`
+                    : 'Chưa có công việc'}
+            </small>
+        </div>
+    );
+}
 
 function statusText(status: string) {
     if (status === 'COMPLETED') return 'Hoàn thành';
@@ -55,6 +108,11 @@ export default function DashboardPage() {
     const [myTasks, setMyTasks] = useState<Task[]>([]);
     const [teamGoals, setTeamGoals] = useState<Record<string, Goal[]>>({});
     const [loading, setLoading] = useState(true);
+    const [reduceMotion, setReduceMotion] = useState(() =>
+        typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
 
     useEffect(() => {
         Promise.all([
@@ -76,12 +134,43 @@ export default function DashboardPage() {
         }).finally(() => setLoading(false));
     }, [user?.id]);
 
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'function') return;
+
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const handleMotionChange = (event: MediaQueryListEvent) => setReduceMotion(event.matches);
+        motionQuery.addEventListener('change', handleMotionChange);
+        return () => motionQuery.removeEventListener('change', handleMotionChange);
+    }, []);
+
     const activeTasks = useMemo(() => myTasks.filter(task => task.status !== 'COMPLETED'), [myTasks]);
     const completedTasks = useMemo(() => myTasks.filter(task => task.status === 'COMPLETED'), [myTasks]);
     const progress = myTasks.length ? Math.round((completedTasks.length / myTasks.length) * 100) : 0;
     const recentTasks = myTasks.slice(0, 5);
     const displayName = user?.fullName || user?.username || 'ORCA';
     const primaryTeam = teams[0];
+    const teamProductivityData = useMemo<TeamProductivityDatum[]>(() =>
+        teams
+            .map(team => {
+                const { totalTasks, completedTasks, productivity } = getTeamTaskProgress(
+                    teamGoals[team.id] || [],
+                );
+                return {
+                    id: team.id,
+                    name: team.name,
+                    productivity,
+                    completedTasks,
+                    totalTasks,
+                };
+            })
+            .sort((a, b) =>
+                b.productivity - a.productivity
+                || b.completedTasks - a.completedTasks
+                || a.name.localeCompare(b.name, 'vi')
+            ),
+        [teamGoals, teams],
+    );
+    const productivityChartHeight = Math.max(240, teamProductivityData.length * 52);
 
     const goToTeamFeature = (featurePath: string) => {
         if (!primaryTeam) {
@@ -265,9 +354,26 @@ export default function DashboardPage() {
                         <div className="dashboard-team-list">
                             {teams.slice(0, 3).map((team, index) => {
                                 const goals = teamGoals[team.id] || [];
-                                const totalGoals = goals.length;
-                                const completedGoals = goals.filter(g => g.status === 'COMPLETED').length;
-                                const isAllCompleted = totalGoals === 0 || totalGoals === completedGoals;
+                                const {
+                                    totalTasks: totalTeamTasks,
+                                    completedTasks: completedTeamTasks,
+                                    productivity: teamProgress,
+                                } = getTeamTaskProgress(goals);
+                                const progressTone = totalTeamTasks === 0
+                                    ? 'empty'
+                                    : teamProgress >= 100
+                                        ? 'complete'
+                                        : 'active';
+                                const statusColor = progressTone === 'complete'
+                                    ? '#10b981'
+                                    : progressTone === 'active'
+                                        ? '#f59e0b'
+                                        : '#a8a29e';
+                                const statusTitle = progressTone === 'complete'
+                                    ? 'Tất cả công việc đã hoàn thành'
+                                    : progressTone === 'active'
+                                        ? 'Nhóm đang thực hiện công việc'
+                                        : 'Nhóm chưa có công việc';
 
                                 return (
                                 <article
@@ -293,19 +399,43 @@ export default function DashboardPage() {
                                                 <span
                                                     style={{
                                                         display: 'inline-block',
-                                                        width: 10,
-                                                        height: 10,
-                                                        borderRadius: '50%',
-                                                        backgroundColor: isAllCompleted ? '#10b981' : '#ef4444',
-                                                        boxShadow: `0 0 8px ${isAllCompleted ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                                                        flexShrink: 0
-                                                    }}
-                                                    title={isAllCompleted ? 'Tất cả công việc đã hoàn thành' : 'Có công việc chưa hoàn thành'}
-                                                />
-                                            </h3>
-                                            <p>{team.description || team.specialty || 'Nhóm xưởng đang được quản lý trên ORCA.'}</p>
-                                        </div>
-                                        <dl>
+                                                         width: 10,
+                                                         height: 10,
+                                                         borderRadius: '50%',
+                                                         backgroundColor: statusColor,
+                                                         boxShadow: `0 0 8px ${statusColor}66`,
+                                                         flexShrink: 0
+                                                     }}
+                                                     title={statusTitle}
+                                                 />
+                                             </h3>
+                                             <p>{team.description || team.specialty || 'Nhóm xưởng đang được quản lý trên ORCA.'}</p>
+                                         </div>
+                                         <div className="dashboard-team-progress">
+                                             <div className="dashboard-team-progress-head">
+                                                 <span>Tiến độ công việc</span>
+                                                 <strong>{teamProgress}%</strong>
+                                             </div>
+                                             <div
+                                                 className="dashboard-team-progress-track"
+                                                 role="progressbar"
+                                                 aria-label={`Tiến độ công việc của nhóm ${team.name}`}
+                                                 aria-valuemin={0}
+                                                 aria-valuemax={100}
+                                                 aria-valuenow={teamProgress}
+                                             >
+                                                 <span
+                                                     className={`dashboard-team-progress-fill ${progressTone}`}
+                                                     style={{ width: `${teamProgress}%` }}
+                                                 />
+                                             </div>
+                                             <small>
+                                                 {totalTeamTasks > 0
+                                                     ? `${completedTeamTasks}/${totalTeamTasks} công việc hoàn thành`
+                                                     : 'Chưa có công việc'}
+                                             </small>
+                                         </div>
+                                         <dl>
                                             <div>
                                                 <dt>Thành viên</dt>
                                                 <dd>{team.memberCount}</dd>
@@ -366,6 +496,84 @@ export default function DashboardPage() {
                     </div>
                 </section>
             </div>
+
+            {teamProductivityData.length > 0 && (
+                <section
+                    className="dashboard-panel dashboard-productivity-panel"
+                    aria-labelledby="dashboard-productivity-title"
+                >
+                    <div className="dashboard-section-head dashboard-productivity-head">
+                        <div>
+                            <span>Hiệu suất vận hành</span>
+                            <h2 id="dashboard-productivity-title">So sánh năng suất nhóm</h2>
+                            <p>Tỷ lệ công việc hoàn thành trên tổng công việc của từng nhóm.</p>
+                        </div>
+                        <div className="dashboard-productivity-legend" aria-label="Chú thích biểu đồ">
+                            <span><i className="active" />Đang thực hiện</span>
+                            <span><i className="complete" />Hoàn thành 100%</span>
+                            <span><i className="empty" />Chưa có công việc</span>
+                        </div>
+                    </div>
+
+                    <div className="dashboard-productivity-chart">
+                        <ResponsiveContainer width="100%" height={productivityChartHeight}>
+                            <BarChart
+                                data={teamProductivityData}
+                                layout="vertical"
+                                margin={{ top: 8, right: 34, bottom: 8, left: 8 }}
+                                accessibilityLayer
+                            >
+                                <CartesianGrid
+                                    stroke="var(--border)"
+                                    strokeDasharray="4 4"
+                                    horizontal={false}
+                                />
+                                <XAxis
+                                    type="number"
+                                    domain={[0, 100]}
+                                    tickFormatter={value => `${value}%`}
+                                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                                    axisLine={{ stroke: 'var(--border)' }}
+                                    tickLine={false}
+                                />
+                                <YAxis
+                                    type="category"
+                                    dataKey="name"
+                                    width={118}
+                                    tickFormatter={value => value.length > 17 ? `${value.slice(0, 16)}…` : value}
+                                    tick={{ fill: 'var(--text-primary)', fontSize: 12, fontWeight: 700 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
+                                <Tooltip
+                                    content={<ProductivityTooltip />}
+                                    cursor={{ fill: 'var(--accent-soft)', opacity: 0.45 }}
+                                />
+                                <Bar
+                                    dataKey="productivity"
+                                    name="Hoàn thành"
+                                    unit="%"
+                                    barSize={18}
+                                    radius={[0, 8, 8, 0]}
+                                    isAnimationActive={!reduceMotion}
+                                    animationDuration={500}
+                                >
+                                    {teamProductivityData.map(team => (
+                                        <Cell
+                                            key={team.id}
+                                            fill={team.totalTasks === 0
+                                                ? 'var(--text-muted)'
+                                                : team.productivity >= 100
+                                                    ? 'var(--success)'
+                                                    : 'var(--primary)'}
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </section>
+            )}
         </div>
     );
 }

@@ -1416,10 +1416,10 @@
 
 .topbar-logout {
   padding: 7px 14px;
-  border: 1px solid var(--danger);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: transparent;
-  color: var(--danger);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font);
@@ -1428,8 +1428,9 @@
 }
 
 .topbar-logout:hover {
-  background: var(--danger-soft);
-  border-color: var(--danger);
+  background: rgba(139, 115, 85, 0.15);
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 .goal-roadmap-markdown {
@@ -3473,9 +3474,9 @@
 .topbar-username  { color: var(--text-primary); }
 
 .topbar-logout {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: var(--danger-soft);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  background: transparent;
 }
 
 .page-container,

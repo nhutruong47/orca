@@ -19,6 +19,15 @@ interface ChatMessage {
     isArchived?: boolean;
 }
 
+interface TaskConversation {
+    id: string;
+    title: string;
+    messages: ChatMessage[];
+    conversationState: AiConversationState;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 type AiConversationMode = 'IDLE' | 'WAITING_CLARIFICATION' | 'DRAFT_READY';
 
 interface AiConversationState {
@@ -30,6 +39,53 @@ interface AiConversationState {
 }
 
 const idleConversation: AiConversationState = { mode: 'IDLE' };
+
+const createConversationId = () =>
+    `task-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const reviveMessages = (items: ChatMessage[]) =>
+    items.map(message => ({
+        ...message,
+        timestamp: new Date(message.timestamp)
+    }));
+
+const getConversationTitle = (messages: ChatMessage[]) => {
+    const draftTitle = [...messages]
+        .reverse()
+        .find(message => message.result?.title?.trim())
+        ?.result?.title?.trim();
+    const firstRequest = messages
+        .find(message => message.role === 'user' && message.content.trim())
+        ?.content.trim();
+    const title = (draftTitle || firstRequest || 'Đoạn chat mới').replace(/\s+/g, ' ');
+
+    return title.length > 52 ? `${title.slice(0, 49)}...` : title;
+};
+
+const upsertConversation = (
+    conversations: TaskConversation[],
+    id: string,
+    messages: ChatMessage[],
+    conversationState: AiConversationState
+) => {
+    if (messages.length === 0) return conversations;
+
+    const existing = conversations.find(conversation => conversation.id === id);
+    const now = new Date();
+    const nextConversation: TaskConversation = {
+        id,
+        title: getConversationTitle(messages),
+        messages,
+        conversationState,
+        createdAt: existing?.createdAt || messages[0]?.timestamp || now,
+        updatedAt: now
+    };
+
+    return [
+        nextConversation,
+        ...conversations.filter(conversation => conversation.id !== id)
+    ];
+};
 
 const priorityLabel = (priority: number) => {
     if (priority >= 4) return 'high';
@@ -262,6 +318,27 @@ export default function CreateTaskPage() {
         }
         return idleConversation;
     });
+    const [activeConversationId, setActiveConversationId] = useState(() => {
+        if (!teamId) return createConversationId();
+        return localStorage.getItem(`ai_task_active_conversation_${teamId}`) || createConversationId();
+    });
+    const [conversations, setConversations] = useState<TaskConversation[]>(() => {
+        if (!teamId) return [];
+
+        try {
+            const saved = localStorage.getItem(`ai_task_conversations_${teamId}`);
+            if (!saved) return [];
+
+            return JSON.parse(saved).map((conversation: TaskConversation) => ({
+                ...conversation,
+                messages: reviveMessages(conversation.messages || []),
+                createdAt: new Date(conversation.createdAt),
+                updatedAt: new Date(conversation.updatedAt)
+            }));
+        } catch {
+            return [];
+        }
+    });
     const [loading, setLoading] = useState(false);
     const [trialActive, setTrialActive] = useState(true);
     const [trialDays, setTrialDays] = useState(30);
@@ -269,18 +346,11 @@ export default function CreateTaskPage() {
     const [showTokens, setShowTokens] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
     const totalTokens = messages.reduce((sum, message) => sum + estimateTokens(message.content), 0);
 
     const handleCopyMessage = (content: string) => {
         navigator.clipboard.writeText(content);
         alert('Đã copy nội dung!');
-    };
-
-    const handleDeleteMessage = (id: string) => {
-        if (window.confirm('Bạn có chắc chắn muốn xóa đoạn chat này?')) {
-            setMessages(prev => prev.filter(m => m.id !== id));
-        }
     };
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -333,6 +403,27 @@ export default function CreateTaskPage() {
         }
     }, [conversationState, teamId]);
 
+    useEffect(() => {
+        if (!teamId) return;
+        localStorage.setItem(`ai_task_active_conversation_${teamId}`, activeConversationId);
+    }, [activeConversationId, teamId]);
+
+    useEffect(() => {
+        if (!teamId) return;
+        if (conversations.length === 0) {
+            localStorage.removeItem(`ai_task_conversations_${teamId}`);
+            return;
+        }
+        localStorage.setItem(`ai_task_conversations_${teamId}`, JSON.stringify(conversations));
+    }, [conversations, teamId]);
+
+    useEffect(() => {
+        if (messages.length === 0) return;
+        setConversations(previous =>
+            upsertConversation(previous, activeConversationId, messages, conversationState)
+        );
+    }, [activeConversationId, conversationState, messages]);
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -343,11 +434,17 @@ export default function CreateTaskPage() {
 
     const clearHistory = () => {
         if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện này?')) {
+            const nextConversationId = createConversationId();
             setMessages([]);
+            setConversations([]);
+            setActiveConversationId(nextConversationId);
             setConversationState(idleConversation);
+            setInput('');
             if (teamId) {
                 localStorage.removeItem(`ai_task_chat_${teamId}`);
                 localStorage.removeItem(`ai_task_state_${teamId}`);
+                localStorage.removeItem(`ai_task_conversations_${teamId}`);
+                localStorage.setItem(`ai_task_active_conversation_${teamId}`, nextConversationId);
             }
         }
     };
@@ -379,9 +476,6 @@ export default function CreateTaskPage() {
             && !msg.isCancelled
             && !msg.isArchived
         );
-
-    const isStoredDraft = (message: ChatMessage) =>
-        hasDraftTasks(message.result);
 
     const handleSend = async () => {
         if (!input.trim() || loading) return;
@@ -631,8 +725,42 @@ export default function CreateTaskPage() {
         }, 100);
     };
 
+    const handleNewConversation = () => {
+        if (loading) return;
+
+        setConversations(previous =>
+            upsertConversation(previous, activeConversationId, messages, conversationState)
+        );
+        setActiveConversationId(createConversationId());
+        setMessages([]);
+        setConversationState(idleConversation);
+        setInput('');
+        setShowHistory(false);
+        window.setTimeout(() => chatInputRef.current?.focus(), 0);
+    };
+
+    const handleOpenConversation = (conversationId: string) => {
+        if (loading || conversationId === activeConversationId) return;
+
+        const selectedConversation = conversations.find(
+            conversation => conversation.id === conversationId
+        );
+        if (!selectedConversation) return;
+
+        setConversations(previous =>
+            upsertConversation(previous, activeConversationId, messages, conversationState)
+        );
+        setActiveConversationId(selectedConversation.id);
+        setMessages(reviveMessages(selectedConversation.messages));
+        setConversationState(selectedConversation.conversationState || idleConversation);
+        setInput('');
+        setShowHistory(false);
+    };
+
     const hasActiveDraft = Boolean(findActiveDraftMessage(messages)?.result);
-    const draftMessages = messages.filter(isStoredDraft).slice().reverse();
+    const recentConversations = conversations
+        .slice()
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
     if (!team) {
         return (
@@ -716,6 +844,35 @@ export default function CreateTaskPage() {
                     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out;
                     overflow: hidden;
                     white-space: nowrap;
+                }
+                .task-gpt-conversation-item {
+                    width: 100%;
+                    display: block;
+                    padding: 10px 12px;
+                    overflow: hidden;
+                    color: var(--text-primary);
+                    background: transparent;
+                    border: 0;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    line-height: 1.35;
+                    text-align: left;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    cursor: pointer;
+                    transition: background-color 160ms ease, transform 160ms ease;
+                }
+                .task-gpt-conversation-item:hover {
+                    background: var(--bg-primary);
+                }
+                .task-gpt-conversation-item.active {
+                    background: var(--bg-primary);
+                    font-weight: 650;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .task-gpt-conversation-item {
+                        transition: none;
+                    }
                 }
                 .task-gpt-content {
                     flex: 1;
@@ -1018,7 +1175,8 @@ export default function CreateTaskPage() {
                 <div style={{ padding: '16px' }}>
                     <button
                         type="button"
-                        onClick={() => { if(window.confirm('Bạn có muốn tạo công việc mới? Các nội dung chưa lưu có thể bị mất.')) { setMessages([]); setInput(''); } }}
+                        onClick={handleNewConversation}
+                        disabled={loading}
                         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
                         onMouseOver={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                         onMouseOut={e => e.currentTarget.style.background = 'var(--bg-primary)'}
@@ -1035,23 +1193,23 @@ export default function CreateTaskPage() {
                         Gần đây <ion-icon name="time-outline"></ion-icon>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', height: '100%' }}>
-                        {draftMessages.length === 0 && (
+                        {recentConversations.length === 0 && (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '40px', opacity: 0.6, gap: '12px', padding: '0 10px', textAlign: 'center' }}>
                                 <ion-icon name="chatbox-ellipses-outline" style={{ fontSize: '36px' }}></ion-icon>
                                 <span style={{ fontSize: '13px', whiteSpace: 'normal', lineHeight: '1.4' }}>
-                                    Lịch sử đang trống.<br/>Hãy trò chuyện để tạo các bản nháp mới nhé.
+                                    Lịch sử đang trống.<br/>Hãy bắt đầu một đoạn chat mới nhé.
                                 </span>
                             </div>
                         )}
-                        {draftMessages.map(msg => (
+                        {recentConversations.map(conversation => (
                             <button
-                                key={msg.id}
-                                onClick={() => handleRevertDraft(msg.id)}
-                                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}
-                                className="task-gpt-suggestion"
-                                title={msg.result?.description || msg.content}
+                                key={conversation.id}
+                                type="button"
+                                onClick={() => handleOpenConversation(conversation.id)}
+                                className={`task-gpt-conversation-item ${conversation.id === activeConversationId ? 'active' : ''}`}
+                                title={conversation.title}
                             >
-                                {msg.result?.title || msg.result?.description || msg.content}
+                                {conversation.title}
                             </button>
                         ))}
                     </div>

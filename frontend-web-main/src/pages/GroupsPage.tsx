@@ -6,6 +6,8 @@ import VerificationModal from '../components/VerificationModal';
 import FactoryConfigModal from '../components/FactoryConfigModal';
 import api from '../services/api';
 
+const INITIAL_VISIBLE_GROUPS = 4;
+
 export default function GroupsPage() {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<Team[]>([]);
@@ -23,6 +25,7 @@ export default function GroupsPage() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showFactoryConfigModal, setShowFactoryConfigModal] = useState(false);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [showAllGroups, setShowAllGroups] = useState(false);
 
   const totalMembers = useMemo(
     () => groups.reduce((sum, group) => sum + (group.memberCount || group.members?.length || 0), 0),
@@ -32,6 +35,11 @@ export default function GroupsPage() {
   const publishedCount = useMemo(
     () => groups.filter(group => group.isPublished).length,
     [groups],
+  );
+
+  const visibleGroups = useMemo(
+    () => showAllGroups ? groups : groups.slice(0, INITIAL_VISIBLE_GROUPS),
+    [groups, showAllGroups],
   );
 
   const loadGroups = async () => {
@@ -340,8 +348,17 @@ export default function GroupsPage() {
           <section style={{ marginBottom: 20 }}>
             <h2 className="section-title" style={{ fontSize: 18, marginBottom: 12 }}>Nhóm của bạn</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-              {groups.map(group => (
-                <article key={group.id} className="premium-card glass-panel" style={{ padding: 18 }}>
+              {visibleGroups.map((group, index) => (
+                <article
+                  key={group.id}
+                  className="premium-card glass-panel"
+                  style={{
+                    padding: 18,
+                    animation: showAllGroups && index >= INITIAL_VISIBLE_GROUPS
+                      ? 'fadeInRight 180ms ease both'
+                      : undefined,
+                  }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>{group.name}</h3>
@@ -367,6 +384,28 @@ export default function GroupsPage() {
                 </article>
               ))}
             </div>
+            {groups.length > INITIAL_VISIBLE_GROUPS && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAllGroups(current => !current)}
+                  aria-expanded={showAllGroups}
+                >
+                  {showAllGroups ? (
+                    <>
+                      Thu gọn
+                      <ion-icon name="chevron-up-outline"></ion-icon>
+                    </>
+                  ) : (
+                    <>
+                      Xem thêm ({groups.length - INITIAL_VISIBLE_GROUPS})
+                      <ion-icon name="chevron-down-outline"></ion-icon>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </section>
 
           <section>

@@ -883,7 +883,7 @@ export default function GroupDetailPage() {
                                 loadTeamAttendance();
                                 setShowTeamAttendance(true);
                             }}
-                            style={{ background: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#4338ca' }}
+                            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}
                         >
                             <ion-icon name="people-circle-outline"></ion-icon> Quản lý chấm công
                         </button>

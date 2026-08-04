@@ -6,7 +6,6 @@ import { Bell, MoreHorizontal, MessageCircle, Edit, Sparkles } from 'lucide-reac
 import { teamService, notificationService } from '../services/groupService';
 import { useNotificationSocket, type NotificationPayload } from '../hooks/useNotificationSocket';
 import type { AppNotification } from '../types/types';
-import defaultAvatar from '../assets/default-avatar.png';
 
 export default function Layout() {
     const { user, logout } = useAuth();
@@ -233,8 +232,7 @@ export default function Layout() {
                             )}
                         </div>
 
-                        <div className="topbar-avatar" onClick={() => navigate('/profile')} title="Hồ sơ nhân viên" style={{ cursor: 'pointer', backgroundImage: `url(${user?.avatar || defaultAvatar})`, backgroundSize: 'cover', backgroundPosition: 'center', color: 'transparent' }}>
-                        </div>
+
                         <button className="topbar-logout" onClick={logout}>
                             Đăng xuất
                         </button>
