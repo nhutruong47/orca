@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/groupService';
-import type { Team } from '../types/types';
+import type { PlanUsage, Team } from '../types/types';
 import VerificationModal from '../components/VerificationModal';
 import FactoryConfigModal from '../components/FactoryConfigModal';
 import api from '../services/api';
@@ -11,6 +11,7 @@ const INITIAL_VISIBLE_GROUPS = 4;
 export default function GroupsPage() {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<Team[]>([]);
+  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -46,8 +47,12 @@ export default function GroupsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await teamService.getMyTeams();
+      const [data, usage] = await Promise.all([
+        teamService.getMyTeams(),
+        teamService.getMyQuota().catch(() => null),
+      ]);
       setGroups(data);
+      setPlanUsage(usage);
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Không thể tải danh sách nhóm.');
       setGroups([]);
@@ -67,6 +72,10 @@ export default function GroupsPage() {
   };
 
   const openCreateModal = () => {
+    if (planUsage && !planUsage.canCreateWorkshop) {
+      setError(`Gói ${planUsage.planName} chỉ cho phép tối đa ${planUsage.maxWorkshops} xưởng. Vui lòng nâng cấp gói để tạo thêm xưởng.`);
+      return;
+    }
     resetCreateForm();
     setShowCreateModal(true);
   };
@@ -109,7 +118,7 @@ export default function GroupsPage() {
       resetCreateForm();
       navigate(`/groups/${created.id}`);
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.response?.data?.message || 'Khong the tao nhom moi.');
+      setError(err?.response?.data?.message || err?.response?.data?.error || 'Không thể tạo nhóm mới.');
     } finally {
       setSaving(false);
     }
@@ -195,6 +204,7 @@ export default function GroupsPage() {
     try {
       await teamService.deleteTeam(managedTeam.id);
       setGroups(current => current.filter(group => group.id !== managedTeam.id));
+      teamService.getMyQuota().then(setPlanUsage).catch(() => { });
       closeManageModal();
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.response?.data?.message || 'Khong the xoa nhom.');
@@ -246,7 +256,7 @@ export default function GroupsPage() {
             loadGroups();
         }
     } catch (e: any) {
-        alert('Lỗi: ' + (e.response?.data?.error || e.message));
+        alert('Lỗi: ' + (e.response?.data?.message || e.response?.data?.error || e.message));
     }
   };
 
@@ -288,7 +298,13 @@ export default function GroupsPage() {
               <ion-icon name="enter-outline" style={{ fontSize: 16 }}></ion-icon>
               Tham gia nhóm
             </button>
-            <button type="button" className="btn btn-primary" onClick={openCreateModal}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={openCreateModal}
+              disabled={planUsage ? !planUsage.canCreateWorkshop : false}
+              title={planUsage && !planUsage.canCreateWorkshop ? 'Đã đạt giới hạn xưởng của gói hiện tại' : undefined}
+            >
               <ion-icon name="add-circle-outline" style={{ fontSize: 16 }}></ion-icon>
               Tạo nhóm mới
             </button>
@@ -298,18 +314,32 @@ export default function GroupsPage() {
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
         <div className="glass-panel premium-card" style={{ padding: 18 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tổng nhóm</div>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>{groups.length}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Xưởng sở hữu</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>
+            {planUsage ? `${planUsage.workshopsUsed}/${planUsage.maxWorkshops}` : groups.length}
+          </div>
+          {planUsage && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Gói {planUsage.planName}</div>}
         </div>
         <div className="glass-panel premium-card" style={{ padding: 18 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Thành viên</div>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>{totalMembers}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Nhân viên theo gói</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>
+            {planUsage ? `${planUsage.usersUsed}/${planUsage.maxUsers}` : totalMembers}
+          </div>
         </div>
         <div className="glass-panel premium-card" style={{ padding: 18 }}>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Đang lên Marketplace</div>
           <div style={{ fontSize: 24, fontWeight: 800 }}>{publishedCount}</div>
         </div>
       </section>
+
+      {planUsage && (!planUsage.canCreateWorkshop || !planUsage.canAddMember) && (
+        <div className="glass-panel" style={{ marginBottom: 20, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            Bạn đã đạt một giới hạn của gói {planUsage.planName}.
+          </span>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate('/upgrade')}>Nâng cấp gói</button>
+        </div>
+      )}
 
       {error && !showCreateModal && (
         <div className="form-error" style={{ marginBottom: 16 }}>
@@ -337,7 +367,7 @@ export default function GroupsPage() {
               <ion-icon name="enter-outline" style={{ fontSize: 16 }}></ion-icon>
               Tham gia nhóm
             </button>
-            <button type="button" className="btn btn-primary" onClick={openCreateModal}>
+            <button type="button" className="btn btn-primary" onClick={openCreateModal} disabled={planUsage ? !planUsage.canCreateWorkshop : false}>
               <ion-icon name="add-circle-outline" style={{ fontSize: 16 }}></ion-icon>
               Tạo nhóm mới
             </button>

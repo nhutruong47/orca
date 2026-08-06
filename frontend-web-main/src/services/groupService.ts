@@ -1,12 +1,14 @@
 import api from './api';
-import type { Team, Goal, Task, ProductionOrder } from '../types/types';
+import type { Team, Goal, Task, ProductionOrder, PlanUsage } from '../types/types';
 import type { AppNotification, SalaryReport } from '../types/types';
 
 // === Team/Group API ===
 export const teamService = {
     getAllTeams: () => api.get<Team[]>('/api/teams/all').then(r => r.data),
     getMyTeams: () => api.get<Team[]>('/api/teams').then(r => r.data),
+    getMyQuota: () => api.get<PlanUsage>('/api/teams/quota').then(r => r.data),
     getDetail: (id: string) => api.get<Team>(`/api/teams/${id}`).then(r => r.data),
+    getQuota: (id: string) => api.get<PlanUsage>(`/api/teams/${id}/quota`).then(r => r.data),
     create: (data: { name: string; description?: string }) =>
         api.post<Team>('/api/teams', data).then(r => r.data),
     update: (id: string, data: { name?: string; description?: string; metadata?: string }) =>
