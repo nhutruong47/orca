@@ -37,7 +37,13 @@ def extract(request: ExtractRequest) -> ExtractResponse:
         response = ExtractResponse.model_validate(data)
     except ValidationError as exc:
         raise GeminiExtractError(f"Gemini extract JSON failed schema validation: {exc}") from exc
-    return _apply_extract_context(response, request)
+    response = _apply_extract_context(response, request)
+    # Always override clarifyingQuestion with our precise computed version based on actual missing fields
+    if response.missingFields:
+        response.clarifyingQuestion = _clarifying_question_for_missing(response.intent, response.missingFields, response.fields)
+    elif response.intent == "UNKNOWN" and not response.clarifyingQuestion:
+        response.clarifyingQuestion = _clarifying_question_for_missing(response.intent, response.missingFields, response.fields)
+    return response
 
 
 def plan(request: PlanRequest) -> PlanDraftResponse:
@@ -60,13 +66,33 @@ def revise(request: ReviseRequest) -> PlanDraftResponse:
         return safe_draft
 
     prompt = _build_revise_prompt(request)
-    data = _generate_json_object(prompt, max_output_tokens=8192, error_cls=GeminiReviseError)
+
+    def _attempt(extra_suffix: str = "") -> PlanDraftResponse:
+        data = _generate_json_object(prompt + extra_suffix, max_output_tokens=8192, error_cls=GeminiReviseError)
+        try:
+            draft = PlanDraftResponse.model_validate(data)
+        except ValidationError as exc:
+            raise GeminiReviseError(f"Gemini revise JSON failed schema validation: {exc}") from exc
+        draft = _normalize_revise_output(draft, request)
+        return _validate_revise_output(draft, request)
+
     try:
-        draft = PlanDraftResponse.model_validate(data)
-    except ValidationError as exc:
-        raise GeminiReviseError(f"Gemini revise JSON failed schema validation: {exc}") from exc
-    draft = _normalize_revise_output(draft, request)
-    return _validate_revise_output(draft, request)
+        return _attempt()
+    except GeminiReviseError:
+        # Retry once with a stricter instruction appended to the prompt
+        retry_suffix = (
+            "\n\n[RETRY INSTRUCTION] Your previous response was rejected by validation rules. "
+            "Do NOT change any field that was not explicitly mentioned in the user's instruction. "
+            "Only modify the specific parts the user asked about. Keep all other fields identical."
+        )
+        try:
+            return _attempt(retry_suffix)
+        except GeminiReviseError:
+            # Fallback: return original draft untouched + friendly aiNote
+            fallback = request.draft.model_copy(deep=True)
+            fallback.aiNote = "Mình chưa hiểu rõ yêu cầu chỉnh sửa này. Bạn thử mô tả cụ thể hơn nhé? Ví dụ: \"đổi tên thành...\", \"thêm công việc...\", \"đổi hạn thành ngày...\"."
+            return fallback
+
 
 
 
@@ -75,17 +101,19 @@ def _apply_extract_context(response: ExtractResponse, request: ExtractRequest) -
     if context is None or context.mode != "WAITING_CLARIFICATION":
         return response
 
+    # If the user asked an UNKNOWN out-of-scope question, do not stick to previous context intent
+    if response.intent == "UNKNOWN":
+        return response
+
     fields = dict(context.previousFields or {})
     fields.update({key: value for key, value in (response.fields or {}).items() if value not in (None, "", [])})
 
     intent = response.intent
     if context.intent and context.intent != "UNKNOWN":
         intent = context.intent
-    elif intent == "UNKNOWN" and context.intent:
-        intent = context.intent
 
     missing = _missing_extract_fields(intent, fields)
-    clarifying_question = None if not missing else _clarifying_question_for_missing(intent, missing)
+    clarifying_question = None if not missing else _clarifying_question_for_missing(intent, missing, fields)
     confidence = max(response.confidence, 0.7 if not missing else 0.55)
 
     return ExtractResponse(
@@ -103,7 +131,7 @@ def _missing_extract_fields(intent: str, fields: dict[str, Any]) -> list[str]:
     elif intent == "OPERATION_TASK":
         required = ["title", "deadline"]
     else:
-        return ["taskDescription"]
+        return []
 
     missing: list[str] = []
     for key in required:
@@ -113,21 +141,52 @@ def _missing_extract_fields(intent: str, fields: dict[str, Any]) -> list[str]:
     return missing
 
 
-def _clarifying_question_for_missing(intent: str, missing: list[str]) -> str:
-    labels = {
-        "productName": "tên sản phẩm",
-        "quantity": "số lượng",
-        "unit": "đơn vị",
-        "deadline": "hạn hoàn thành",
-        "title": "nội dung công việc",
-        "taskDescription": "nội dung công việc",
+def _clarifying_question_for_missing(intent: str, missing: list[str], fields: dict | None = None) -> str:
+    fields = fields or {}
+    product = fields.get("productName", "")
+    qty = fields.get("quantity", "")
+    unit = fields.get("unit", "")
+
+    if intent == "UNKNOWN":
+        return "Dạ em là trợ lý ORCA chuyên hỗ trợ quản lý sản xuất và công việc cho xưởng. Anh/chị cần em giúp lên kế hoạch sản xuất hay tạo công việc vận hành nào không ạ?"
+
+    # Single missing field — ask naturally and specifically
+    if missing == ["deadline"]:
+        if product and qty and unit:
+            return f"Anh/chị muốn hoàn thành mẻ {product} {qty}{unit} này trước thời gian nào ạ?"
+        if product:
+            return f"Anh/chị cho mình biết hạn hoàn thành cho yêu cầu {product} này nhé?"
+        return "Anh/chị muốn hoàn thành công việc này trước ngày/giờ nào ạ?"
+
+    if missing == ["productName"]:
+        return "Anh/chị đang muốn sản xuất sản phẩm gì vậy ạ? (ví dụ: Arabica, Robusta, Blend...)"
+
+    if missing == ["quantity"]:
+        if product:
+            return f"Anh/chị muốn sản xuất bao nhiêu {product} ạ?"
+        return "Anh/chị muốn sản xuất bao nhiêu ạ?"
+
+    if missing == ["unit"]:
+        return "Đơn vị tính là gì ạ? (ví dụ: kg, tấn, túi...)"
+
+    if missing == ["title"]:
+        return "Anh/chị muốn tạo công việc gì ạ?"
+
+    # Multiple missing fields — list them out clearly
+    label_map = {
+        "productName": "tên sản phẩm (ví dụ: Arabica, Robusta)",
+        "quantity":    "số lượng",
+        "unit":        "đơn vị (kg, tấn...)",
+        "deadline":    "hạn hoàn thành",
+        "title":       "nội dung công việc",
+        "taskDescription": "mô tả công việc",
     }
-    readable = ", ".join(labels.get(item, item) for item in missing)
+    readable = ", ".join(label_map.get(f, f) for f in missing)
     if intent == "PRODUCTION_PLAN":
-        return f"Bạn bổ sung giúp mình {readable} cho yêu cầu sản xuất này nhé?"
+        return f"Anh/chị bổ sung giúp mình {readable} cho yêu cầu sản xuất này nhé?"
     if intent == "OPERATION_TASK":
-        return f"Bạn bổ sung giúp mình {readable} cho công việc này nhé?"
-    return "Anh/chị muốn tạo công việc gì và hạn hoàn thành khi nào?"
+        return f"Anh/chị bổ sung giúp mình {readable} cho công việc này nhé?"
+    return "Dạ em là trợ lý ORCA chuyên hỗ trợ quản lý xưởng. Anh/chị cần em hỗ trợ lên kế hoạch sản xuất hay giao việc gì hôm nay không ạ?"
 
 
 def _build_extract_context_section(request: ExtractRequest) -> str:
@@ -168,13 +227,15 @@ Required fields:
 
 Deadline rules:
 - Return deadline as ISO local datetime string without timezone offset, e.g. "2026-06-07T17:00:00".
-- Resolve Vietnamese relative dates using Current local datetime.
+- Resolve Vietnamese relative and absolute dates using Current local datetime (year {now.year}).
+- "5 tháng 8" or "hạn 5 tháng 8" or "ngày 5 tháng 8" or "5/8" means day 5 of month 8 in the current year: "{now.year}-08-05T17:00:00".
 - "hom nay"/"hôm nay" means today.
 - "ngay mai"/"ngày mai"/"mai" means tomorrow.
 - "sang"/"sáng" default time 09:00.
 - "chieu"/"chiều" default time 14:00.
 - If date is present but time is absent, default time 17:00.
 - If exact time is present, use that exact time.
+- When the user text contains a date phrase (e.g. "hạn 5 tháng 8", "ngày 5/8", "hôm nay"), you MUST extract deadline into fields and remove "deadline" from missingFields.
 
 Output only one JSON object matching this schema:
 {{
@@ -192,7 +253,9 @@ Field conventions:
 - OPERATION_TASK fields may include: title, area, deadline, priority.
 - UNKNOWN should not invent production fields.
 - If missingFields is not empty, clarifyingQuestion must ask for those missing details in Vietnamese.
-- If missingFields is empty, clarifyingQuestion must be null.
+- If intent is UNKNOWN (out-of-scope, casual chat, weather, general knowledge, or unsupported feature requests):
+  - missingFields MUST be empty [].
+  - clarifyingQuestion MUST be a witty, friendly, humorous response in Vietnamese. Use the specific topic of the user's input (e.g. weather, geography, love, revenue reports) to make a lighthearted joke about your limitations as a workshop assistant, then warmly guide them back to creating a production plan or an operational task.
 
 Examples:
 User: "Rang 120kg Arabica trước 17:00 hôm nay"
@@ -205,11 +268,30 @@ JSON:
     "productName": "Arabica",
     "quantity": 120,
     "unit": "kg",
-    "deadline": "{now.strftime("%Y-%m-%d")}T17:00:00",
-    "priority": "HIGH"
+    "deadline": "{now.year}-08-03T17:00:00"
   }},
   "missingFields": [],
   "clarifyingQuestion": null
+}}
+
+User: "Thời tiết hôm nay thế nào?"
+JSON:
+{{
+  "intent": "UNKNOWN",
+  "confidence": 0.95,
+  "fields": {{}},
+  "missingFields": [],
+  "clarifyingQuestion": "Mình không biết dự báo thời tiết hôm nay nắng hay mưa đâu ☀️🌧️, nhưng mình biết chắc xưởng bạn đang chờ lên mẻ sản xuất đấy! Bạn muốn tạo mẻ rang nào hôm nay không?"
+}}
+
+User: "Quê của Bác Hồ ở đâu?"
+JSON:
+{{
+  "intent": "UNKNOWN",
+  "confidence": 0.95,
+  "fields": {{}},
+  "missingFields": [],
+  "clarifyingQuestion": "Biết quê Bác ở Nam Đàn, Nghệ An thì vượt quá tầm phủ sóng của một trợ lý xưởng như mình rồi 😅! Mình chỉ giỏi chia việc và lên mẻ sản xuất thôi. Bạn có việc gì cần mình giao hôm nay không?"
 }}
 
 User: "Làm cái kia cho khách"
@@ -283,7 +365,10 @@ Hard rules:
 - suggestedAssigneeId is optional and must be one of the provided team member userId values.
 - If no suitable member exists, set suggestedAssigneeId and suggestedAssigneeName to null.
 - A member with empty jobLabels is not suitable for any specialized task.
-- Only suggest a member when their jobLabels semantically match the task.
+- Only suggest a member when their jobLabels semantically match the main action of the task. If a member has a jobLabel directly matching a task action (such as 'phối trộn' or 'trộn' for blending tasks, 'medium roast', 'rang', or 'rang xay' for roasting tasks, 'xay' for grinding, 'đóng gói' for packaging), you MUST suggest that member for that task.
+- For primary execution tasks (e.g., 'Rang 129kg', 'Phối trộn', 'Xay hạt', 'Đóng gói'), match members whose jobLabels contain relevant execution keywords (e.g., 'rang', 'rang xay', 'phối trộn', 'trộn', 'medium roast', 'sản xuất', 'xay', 'đóng gói') regardless of accents/diacritics or casing. ALWAYS prioritize assigning the specialist member with matching jobLabels (e.g. 'rang', 'rang xay') to the PRIMARY roasting execution task FIRST. Do NOT assign the roaster exclusively to a preliminary preparation task while leaving the main roasting task unassigned (Task 'Rang 129kg').
+- A qualified team member CAN be suggested for multiple tasks in the plan if they are the only qualified person for those tasks.
+- NEVER evaluate an execution task (roasting, grinding, blending, packaging) as requiring a QC/quality control label, even if its description mentions quality standards. QC label matching is reserved strictly and exclusively for dedicated quality inspection/testing/cupping tasks.
 - Never invent a person, username, full name, or userId.
 - suggestedAssigneeName must match the selected member's fullName when available, otherwise username.
 - Keep the draft in Vietnamese.
@@ -388,6 +473,8 @@ def _validate_plan_input(request: PlanRequest) -> None:
 
     fields = request.fields or {}
     if request.intent == "PRODUCTION_PLAN":
+        if _is_blank(fields.get("productName")) or _is_generic_product_name(fields.get("productName")):
+            fields["productName"] = "Cà phê"
         required = ["productName", "quantity", "unit", "deadline"]
     elif request.intent == "OPERATION_TASK":
         required = ["title", "deadline"]
@@ -395,8 +482,6 @@ def _validate_plan_input(request: PlanRequest) -> None:
         raise GeminiPlanInputError(f"Unsupported intent for plan: {request.intent}")
 
     missing = [field for field in required if _is_blank(fields.get(field))]
-    if request.intent == "PRODUCTION_PLAN" and _is_generic_product_name(fields.get("productName")):
-        missing.append("productName")
     if missing:
         raise GeminiPlanInputError(f"Cannot create plan because required fields are missing: {', '.join(missing)}.")
 
@@ -434,7 +519,11 @@ def _validate_revise_output(draft: PlanDraftResponse, request: ReviseRequest) ->
     allowed_members = {member.userId: member for member in request.members}
     draft.tasks = [_sanitize_assignee(task, allowed_members) for task in draft.tasks]
 
-    if not _mentions_any(instruction, ["tieu de", "title", "goal", "muc tieu", "output", "ket qua"]):
+    if not _mentions_any(instruction, [
+        "tieu de", "title", "goal", "muc tieu", "output", "ket qua",
+        "sua", "doi", "thanh", "ten", "doi ten",
+        "arabica", "robusta", "blend", "cafe", "ca phe", "me", "san pham",
+    ]):
         _require_equal(draft.goalTitle, original.goalTitle, "Gemini revise changed goalTitle without instruction.")
         _require_equal(draft.outputTarget, original.outputTarget, "Gemini revise changed outputTarget without instruction.")
 
@@ -447,7 +536,10 @@ def _validate_revise_output(draft: PlanDraftResponse, request: ReviseRequest) ->
             raise GeminiReviseError(
                 f"Gemini revise returned {len(draft.tasks)} tasks, expected {requested_task_count} tasks."
             )
-    elif not _mentions_any(instruction, ["them", "xoa", "rut gon", "tach", "task", "cong viec"]):
+    elif not _mentions_any(instruction, [
+        "them", "xoa", "rut gon", "tach", "task", "cong viec",
+        "sua", "doi", "thanh", "arabica", "robusta", "blend", "cafe", "ca phe", "me", "san pham", "loai",
+    ]):
         _require_task_signatures_equal(draft, original)
 
     requested_deadline = _requested_deadline(instruction)
@@ -887,7 +979,7 @@ def _is_generic_product_name(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     normalized = value.strip().lower()
-    return normalized in {"sản phẩm", "cà phê", "hàng", "đơn hàng", "mặt hàng"}
+    return normalized in {"sản phẩm", "hàng", "đơn hàng", "mặt hàng"}
 
 
 def _local_now() -> datetime:
@@ -1088,13 +1180,19 @@ def _parse_json_object(raw_text: str, error_cls: Type[RuntimeError]) -> dict:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        if not match:
-            raise error_cls(f"Gemini output is not JSON: {raw_text[:1000]}")
-        try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError as exc:
-            raise error_cls(f"Gemini output contains invalid JSON: {raw_text[:1000]}") from exc
+        parsed = None
+        match = re.search(r"\{.*", text, flags=re.DOTALL)
+        if match:
+            candidate = match.group(0).rstrip()
+            candidate = re.sub(r"\s*```$", "", candidate)
+            for suffix in ["", "}", "}\n", "\n}", "}}", "}\n}", "}]}", '"}}', '"}\n}', '"\n}', '}\n}\n}']:
+                try:
+                    parsed = json.loads(candidate + suffix)
+                    break
+                except json.JSONDecodeError:
+                    pass
+        if parsed is None:
+            raise error_cls(f"Gemini output contains invalid JSON: {raw_text[:1000]}")
 
     if not isinstance(parsed, dict):
         raise error_cls("Gemini output must be a JSON object.")
