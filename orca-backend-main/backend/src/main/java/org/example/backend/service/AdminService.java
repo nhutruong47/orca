@@ -146,6 +146,9 @@ public class AdminService {
         List<ProductionOrder> productionOrders = productionOrderRepository.findAll();
         List<ProductionBatch> productionBatches = productionBatchRepository.findAll();
         List<PaymentTransaction> payments = paymentRepository.findAll();
+        List<PaymentTransaction> reportablePayments = payments.stream()
+                .filter(this::isReportablePayment)
+                .toList();
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
         LocalDateTime previousMonthStart = monthStart.minusMonths(1);
@@ -191,13 +194,13 @@ public class AdminService {
         overview.put("completedBatches", productionBatches.stream()
                 .filter(batch -> isCompletedStatus(batch.getStatus()))
                 .count());
-        overview.put("paidPayments", payments.stream().filter(this::isPaidPayment).count());
-        overview.put("totalPayments", payments.size());
-        overview.put("revenueThisMonth", sumPaidBetween(payments, monthStart, now));
-        overview.put("revenuePreviousMonth", sumPaidBetween(payments, previousMonthStart, monthStart));
-        overview.put("revenueThisYear", sumPaidBetween(payments, yearStart, now));
-        overview.put("revenuePreviousYear", sumPaidBetween(payments, previousYearStart, yearStart));
-        overview.put("revenueTotal", payments.stream()
+        overview.put("paidPayments", reportablePayments.stream().filter(this::isPaidPayment).count());
+        overview.put("totalPayments", reportablePayments.size());
+        overview.put("revenueThisMonth", sumPaidBetween(reportablePayments, monthStart, now));
+        overview.put("revenuePreviousMonth", sumPaidBetween(reportablePayments, previousMonthStart, monthStart));
+        overview.put("revenueThisYear", sumPaidBetween(reportablePayments, yearStart, now));
+        overview.put("revenuePreviousYear", sumPaidBetween(reportablePayments, previousYearStart, yearStart));
+        overview.put("revenueTotal", reportablePayments.stream()
                 .filter(this::isPaidPayment)
                 .mapToLong(PaymentTransaction::getAmount)
                 .sum());
@@ -215,14 +218,14 @@ public class AdminService {
                 .limit(5)
                 .map(this::toTeamMap)
                 .toList());
-        overview.put("systemTrendData", generateSystemTrendData(payments, users, teams));
+        overview.put("systemTrendData", generateSystemTrendData(reportablePayments, users, teams));
 
         return overview;
     }
 
     private List<Map<String, Object>> generateSystemTrendData(List<PaymentTransaction> payments, List<User> users, List<Team> teams) {
         List<Map<String, Object>> trendData = new java.util.ArrayList<>();
-        java.time.format.DateTimeFormatter monthFormatter = java.time.format.DateTimeFormatter.ofPattern("MMM", java.util.Locale.ENGLISH);
+        java.time.format.DateTimeFormatter monthFormatter = java.time.format.DateTimeFormatter.ofPattern("MM/yyyy");
         LocalDateTime now = LocalDateTime.now();
 
         for (int i = 5; i >= 0; i--) {
@@ -238,8 +241,12 @@ public class AdminService {
                 .mapToLong(PaymentTransaction::getAmount)
                 .sum();
             
-            long companies = teams.stream().filter(t -> t.getCreatedAt() != null && t.getCreatedAt().isBefore(monthEnd)).count();
-            long userCount = users.stream().filter(u -> u.getCreatedAt() != null && u.getCreatedAt().isBefore(monthEnd)).count();
+            long companies = teams.stream()
+                    .filter(team -> isBetween(team.getCreatedAt(), monthStart, monthEnd))
+                    .count();
+            long userCount = users.stream()
+                    .filter(user -> isBetween(user.getCreatedAt(), monthStart, monthEnd))
+                    .count();
             
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("month", monthStart.format(monthFormatter));
@@ -273,6 +280,12 @@ public class AdminService {
 
     private boolean isPaidPayment(PaymentTransaction payment) {
         return "PAID".equalsIgnoreCase(safeText(payment.getStatus(), ""));
+    }
+
+    private boolean isReportablePayment(PaymentTransaction payment) {
+        String txnRef = safeText(payment.getTxnRef(), "").toUpperCase(Locale.ROOT);
+        String bankCode = safeText(payment.getBankCode(), "").toUpperCase(Locale.ROOT);
+        return !txnRef.startsWith("DEMO-") && !bankCode.endsWith("_QR");
     }
 
     private boolean isActiveStatus(String status) {
@@ -542,7 +555,7 @@ public class AdminService {
             sheet.getRow(rowIdx - 1).createCell(1).setCellValue(String.valueOf(overview.get("totalTeams")));
 
             sheet.createRow(rowIdx++).createCell(0).setCellValue("Tong doanh thu");
-            sheet.getRow(rowIdx - 1).createCell(1).setCellValue(String.valueOf(overview.get("totalRevenue")));
+            sheet.getRow(rowIdx - 1).createCell(1).setCellValue(String.valueOf(overview.get("revenueTotal")));
 
             wb.write(out);
             return out.toByteArray();

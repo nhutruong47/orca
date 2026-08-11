@@ -33,42 +33,20 @@ public class CostService {
     @PostConstruct
     public void seedCostData() {
         if (costCategoryRepository.count() == 0) {
-            String[] categories = {"Marketing", "Server", "Cloud", "AI API", "Google", "AWS", "Azure", "Vercel", "Domain", "Email", "SMS", "Lương", "Thưởng", "Thuê văn phòng", "Thiết bị", "Phần mềm", "Khác"};
-            List<CostCategory> savedCategories = new ArrayList<>();
+            String[] categories = {
+                "Máy chủ & lưu trữ",
+                "Cơ sở dữ liệu",
+                "AI API",
+                "Email & thông báo",
+                "Tên miền & bảo mật",
+                "Giám sát hệ thống"
+            };
             for (String catName : categories) {
                 CostCategory cat = new CostCategory();
                 cat.setName(catName);
                 cat.setDescription("Danh mục " + catName);
                 cat.setStatus("ACTIVE");
-                savedCategories.add(costCategoryRepository.save(cat));
-            }
-
-            // Seed some costs
-            Random random = new Random();
-            for (int i = 0; i < 50; i++) {
-                Cost cost = new Cost();
-                CostCategory cat = savedCategories.get(random.nextInt(savedCategories.size()));
-                cost.setName("Chi phí " + cat.getName() + " #" + (i + 1));
-                cost.setCategory(cat);
-                
-                // Random amount between 1,000,000 and 50,000,000
-                long amount = 1000000L + (long)(random.nextDouble() * 49000000L);
-                cost.setAmount(new BigDecimal(amount));
-                cost.setCurrency("VND");
-                
-                // Random date in the last 6 months
-                LocalDateTime now = LocalDateTime.now();
-                long daysToSubtract = random.nextInt(180);
-                cost.setDate(now.minusDays(daysToSubtract));
-                
-                cost.setPayer("Admin");
-                cost.setDescription("Thanh toán cho " + cat.getName());
-                
-                String[] statuses = {"PAID", "PAID", "PAID", "PENDING", "CANCELLED"};
-                cost.setStatus(statuses[random.nextInt(statuses.length)]);
-                
-                cost.setCreatedBy("system");
-                costRepository.save(cost);
+                costCategoryRepository.save(cat);
             }
         }
     }
@@ -180,10 +158,12 @@ public class CostService {
     public CostDashboardStats getDashboardStats() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
+        LocalDateTime tomorrowStart = todayStart.plusDays(1);
         LocalDateTime monthStart = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
         LocalDateTime previousMonthStart = monthStart.minusMonths(1);
         LocalDateTime yearStart = now.withDayOfYear(1).toLocalDate().atStartOfDay();
         LocalDateTime previousYearStart = yearStart.minusYears(1);
+        LocalDateTime previousYearSameMoment = now.minusYears(1);
 
         List<Cost> allCosts = costRepository.findAll();
         
@@ -202,11 +182,13 @@ public class CostService {
             
             LocalDateTime dt = c.getDate() != null ? c.getDate() : c.getCreatedAt();
             if (dt != null) {
-                if (!dt.isBefore(todayStart)) totalToday = totalToday.add(amt);
-                if (!dt.isBefore(monthStart)) totalMonth = totalMonth.add(amt);
+                if (!dt.isBefore(todayStart) && dt.isBefore(tomorrowStart)) totalToday = totalToday.add(amt);
+                if (!dt.isBefore(monthStart) && !dt.isAfter(now)) totalMonth = totalMonth.add(amt);
                 if (!dt.isBefore(previousMonthStart) && dt.isBefore(monthStart)) totalPreviousMonth = totalPreviousMonth.add(amt);
-                if (!dt.isBefore(yearStart)) totalYear = totalYear.add(amt);
-                if (!dt.isBefore(previousYearStart) && dt.isBefore(yearStart)) totalPreviousYear = totalPreviousYear.add(amt);
+                if (!dt.isBefore(yearStart) && !dt.isAfter(now)) totalYear = totalYear.add(amt);
+                if (!dt.isBefore(previousYearStart) && !dt.isAfter(previousYearSameMoment)) {
+                    totalPreviousYear = totalPreviousYear.add(amt);
+                }
             }
         }
 
@@ -264,7 +246,7 @@ public class CostService {
         return daily.entrySet().stream().map(e -> {
             Map<String, Object> map = new HashMap<>();
             map.put("date", e.getKey());
-            map.put("amount", e.getValue().divide(new BigDecimal("1000000"), 2, java.math.RoundingMode.HALF_UP)); // millions
+            map.put("amount", e.getValue().divide(new BigDecimal("1000000"), 4, java.math.RoundingMode.HALF_UP)); // millions
             return map;
         }).collect(Collectors.toList());
     }
@@ -293,7 +275,7 @@ public class CostService {
         return monthly.entrySet().stream().map(e -> {
             Map<String, Object> map = new HashMap<>();
             map.put("month", e.getKey());
-            map.put("amount", e.getValue().divide(new BigDecimal("1000000"), 2, java.math.RoundingMode.HALF_UP));
+            map.put("amount", e.getValue().divide(new BigDecimal("1000000"), 4, java.math.RoundingMode.HALF_UP));
             return map;
         }).collect(Collectors.toList());
     }
@@ -310,7 +292,7 @@ public class CostService {
                 .map(e -> {
                     Map<String, Object> map = new HashMap<>();
                     map.put("name", e.getKey());
-                    map.put("value", e.getValue().divide(new BigDecimal("1000000"), 2, java.math.RoundingMode.HALF_UP));
+                    map.put("value", e.getValue().divide(new BigDecimal("1000000"), 4, java.math.RoundingMode.HALF_UP));
                     return map;
                 })
                 .sorted((a, b) -> ((BigDecimal) b.get("value")).compareTo((BigDecimal) a.get("value")))
