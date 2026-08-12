@@ -67,3 +67,4 @@ def revise(request: ReviseRequest) -> PlanDraftResponse:
             logger.error(f"[AI Service /revise Error]: {exc}")
             raise HTTPException(status_code=502, detail="Dịch vụ AI đang bận hoặc gián đoạn tạm thời. Vui lòng thử lại sau.") from exc
     raise HTTPException(status_code=400, detail=f"Unsupported AI_V2_MODE: {settings.ai_v2_mode}")
+

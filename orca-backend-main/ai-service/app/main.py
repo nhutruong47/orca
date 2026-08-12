@@ -1,4 +1,3 @@
-import logging
 from fastapi import FastAPI, HTTPException
 
 from app.config import settings
@@ -11,7 +10,6 @@ from app.mock_ai import plan as mock_plan
 from app.mock_ai import revise as mock_revise
 from app.models import ExtractRequest, ExtractResponse, PlanDraftResponse, PlanRequest, ReviseRequest
 
-logger = logging.getLogger("orca-ai-service")
 
 app = FastAPI(title="ORCA AI Service", version="0.1.0")
 
@@ -30,8 +28,7 @@ def extract(request: ExtractRequest) -> ExtractResponse:
         try:
             return gemini_extract(request)
         except GeminiExtractError as exc:
-            logger.error(f"[AI Service /extract Error]: {exc}")
-            raise HTTPException(status_code=502, detail="Dịch vụ AI đang bận hoặc gián đoạn tạm thời. Vui lòng thử lại sau.") from exc
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
     raise HTTPException(status_code=400, detail=f"Unsupported AI_V2_MODE: {settings.ai_v2_mode}")
 
 
@@ -51,8 +48,7 @@ def plan(request: PlanRequest) -> PlanDraftResponse:
         except GeminiPlanInputError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except GeminiPlanError as exc:
-            logger.error(f"[AI Service /plan Error]: {exc}")
-            raise HTTPException(status_code=502, detail="Dịch vụ AI đang bận hoặc gián đoạn tạm thời. Vui lòng thử lại sau.") from exc
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
     raise HTTPException(status_code=400, detail=f"Unsupported AI_V2_MODE: {settings.ai_v2_mode}")
 
 
@@ -64,6 +60,5 @@ def revise(request: ReviseRequest) -> PlanDraftResponse:
         try:
             return gemini_revise(request)
         except GeminiReviseError as exc:
-            logger.error(f"[AI Service /revise Error]: {exc}")
-            raise HTTPException(status_code=502, detail="Dịch vụ AI đang bận hoặc gián đoạn tạm thời. Vui lòng thử lại sau.") from exc
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
     raise HTTPException(status_code=400, detail=f"Unsupported AI_V2_MODE: {settings.ai_v2_mode}")
