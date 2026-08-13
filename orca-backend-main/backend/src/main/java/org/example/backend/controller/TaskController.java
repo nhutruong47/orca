@@ -196,7 +196,7 @@ public class TaskController {
                                              @RequestParam(required = false) Integer year,
                                              @RequestParam(required = false) Integer month,
                                              @AuthenticationPrincipal User user) {
-        accessControlService.requireTeamMember(user, teamId);
+        accessControlService.requireTeamAdmin(user, teamId);
         return ResponseEntity.ok(taskService.getSalaryReport(teamId, year, month));
     }
 
@@ -205,7 +205,7 @@ public class TaskController {
                                                     @RequestParam(required = false) Integer year,
                                                     @RequestParam(required = false) Integer month,
                                                     @AuthenticationPrincipal User user) throws Exception {
-        accessControlService.requireTeamMember(user, teamId);
+        accessControlService.requireTeamAdmin(user, teamId);
         byte[] excelBytes = taskService.exportSalaryExcel(teamId, year, month);
         String period = year != null && month != null ? "-" + year + "-" + String.format("%02d", month) : "";
         String filename = "bang-luong-" + teamId + period + ".xlsx";
@@ -220,6 +220,7 @@ public class TaskController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @AuthenticationPrincipal User user) {
+        accessControlService.requireTeamAdmin(user, teamId);
         // We get totalSalary from taskService
         Map<String, Object> mockResult = taskService.payoutSalary(teamId, user.getId(), year, month);
         double totalSalary = (double) mockResult.get("totalSalary");

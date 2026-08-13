@@ -49,11 +49,16 @@ public class NotificationService {
 
     /** Create and broadcast a notification (idempotent nhờ DB lưu trước). */
     public NotificationDTO createAndSend(User user, String title, String message, String type, UUID taskId) {
+        return createAndSend(user, title, message, type, taskId, null);
+    }
+
+    public NotificationDTO createAndSend(
+            User user, String title, String message, String type, UUID taskId, UUID actorId) {
         if (user == null) {
             log.warn("createAndSend called with null user (title={}, type={})", title, type);
             return null;
         }
-        Notification saved = persistNotification(user, title, message, type, taskId);
+        Notification saved = persistNotification(user, title, message, type, taskId, actorId);
         NotificationDTO dto = toDTO(saved);
         broadcastWithRetry(user.getId(), dto, title);
         return dto;
@@ -61,12 +66,17 @@ public class NotificationService {
 
     /** Overload accepting userId as UUID */
     public NotificationDTO createAndSend(UUID userId, String title, String message, String type, UUID taskId) {
+        return createAndSend(userId, title, message, type, taskId, null);
+    }
+
+    public NotificationDTO createAndSend(
+            UUID userId, String title, String message, String type, UUID taskId, UUID actorId) {
         User user = userRepo.findById(userId).orElse(null);
         if (user == null) {
             log.warn("createAndSend called with missing userId={} (title={})", userId, title);
             return null;
         }
-        return createAndSend(user, title, message, type, taskId);
+        return createAndSend(user, title, message, type, taskId, actorId);
     }
 
     /**
@@ -75,13 +85,15 @@ public class NotificationService {
      * biết.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    protected Notification persistNotification(User user, String title, String message, String type, UUID taskId) {
+    protected Notification persistNotification(
+            User user, String title, String message, String type, UUID taskId, UUID actorId) {
         Notification n = new Notification();
         n.setUser(user);
         n.setTitle(title);
         n.setMessage(message);
         n.setType(type);
         n.setTaskId(taskId);
+        n.setActorId(actorId);
         n.setIsRead(false);
         Notification saved = notifRepo.save(n);
         log.info("Notification persisted: id={}, user={}, type={}, title={}",
@@ -146,6 +158,16 @@ public class NotificationService {
         });
     }
 
+    @Transactional
+    public int markChatConversationRead(UUID userId, UUID teamId, UUID actorId) {
+        int updated = actorId == null
+                ? notifRepo.markGroupChatRead(userId, teamId)
+                : notifRepo.markDirectChatRead(userId, teamId, actorId);
+        log.debug("Marked {} chat notifications as read: user={}, team={}, actor={}",
+                updated, userId, teamId, actorId);
+        return updated;
+    }
+
     /**
      * Verifies that a notification belongs to a given user. Prevents IDOR on
      * mark-as-read by ensuring the caller owns the target notification.
@@ -176,6 +198,7 @@ public class NotificationService {
         dto.setMessage(n.getMessage());
         dto.setType(n.getType());
         dto.setTaskId(n.getTaskId() != null ? n.getTaskId().toString() : null);
+        dto.setActorId(n.getActorId() != null ? n.getActorId().toString() : null);
         dto.setRead(n.getIsRead());
         dto.setCreatedAt(n.getCreatedAt());
         return dto;

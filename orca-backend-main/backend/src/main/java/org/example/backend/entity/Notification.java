@@ -36,6 +36,13 @@ public class Notification {
     @Column(name = "task_id")
     private UUID taskId;
 
+    /**
+     * Sender of a direct chat notification. Null identifies a group-chat
+     * notification, allowing unread state to be cleared per conversation.
+     */
+    @Column(name = "actor_id")
+    private UUID actorId;
+
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
 
@@ -65,6 +72,9 @@ public class Notification {
 
     public UUID getTaskId() { return taskId; }
     public void setTaskId(UUID taskId) { this.taskId = taskId; }
+
+    public UUID getActorId() { return actorId; }
+    public void setActorId(UUID actorId) { this.actorId = actorId; }
 
     public Boolean getIsRead() { return isRead; }
     public void setIsRead(Boolean isRead) { this.isRead = isRead; }

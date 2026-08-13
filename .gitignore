@@ -37,6 +37,7 @@ data/
 
 # Logs
 logs/
+.runtime-logs/
 *.log
 *.err
 

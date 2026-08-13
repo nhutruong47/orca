@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public class UpdateAttendanceRequest {
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
+    private String reason;
 
     public LocalDateTime getCheckInTime() {
         return checkInTime;
@@ -21,4 +22,7 @@ public class UpdateAttendanceRequest {
     public void setCheckOutTime(LocalDateTime checkOutTime) {
         this.checkOutTime = checkOutTime;
     }
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
 }

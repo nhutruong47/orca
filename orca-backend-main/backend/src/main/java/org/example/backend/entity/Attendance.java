@@ -87,7 +87,8 @@ public class Attendance {
         ON_TIME,
         LATE,
         MISSING_CHECKOUT,
-        ABSENT
+        ABSENT,
+        LEAVE
     }
 
     public Attendance() {}

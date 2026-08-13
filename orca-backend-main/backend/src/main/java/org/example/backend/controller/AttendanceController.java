@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -36,7 +37,7 @@ public class AttendanceController {
         accessControlService.requireTeamMember(currentUser, teamId);
         UUID userId = currentUser.getId();
         try {
-            Attendance.ShiftType shiftType = Attendance.ShiftType.SANG;
+            Attendance.ShiftType shiftType = Attendance.ShiftType.NGAY;
             Attendance.ProductionStage stage = null;
             UUID orderId = null;
             Integer breakMinutes = 30;
@@ -100,13 +101,21 @@ public class AttendanceController {
 
     @GetMapping("/team-today/{teamId}")
     public ResponseEntity<?> getTeamAttendanceToday(@PathVariable UUID teamId, @AuthenticationPrincipal User currentUser) {
-        accessControlService.requireTeamMember(currentUser, teamId);
+        accessControlService.requireTeamAdmin(currentUser, teamId);
         return ResponseEntity.ok(attendanceService.getTeamAttendanceToday(teamId));
+    }
+
+    @GetMapping("/team-daily/{teamId}")
+    public ResponseEntity<?> getTeamAttendanceByDate(@PathVariable UUID teamId,
+                                                      @RequestParam(required = false) LocalDate date,
+                                                      @AuthenticationPrincipal User currentUser) {
+        accessControlService.requireTeamAdmin(currentUser, teamId);
+        return ResponseEntity.ok(attendanceService.getTeamAttendanceByDate(teamId, date));
     }
 
     @GetMapping("/team-history/{teamId}")
     public ResponseEntity<?> getTeamAttendanceHistory(@PathVariable UUID teamId, @AuthenticationPrincipal User currentUser) {
-        accessControlService.requireTeamMember(currentUser, teamId);
+        accessControlService.requireTeamAdmin(currentUser, teamId);
         return ResponseEntity.ok(attendanceService.getTeamAttendanceHistory(teamId));
     }
 
@@ -115,12 +124,21 @@ public class AttendanceController {
             @PathVariable UUID attendanceId,
             @AuthenticationPrincipal User currentUser,
             @RequestBody UpdateAttendanceRequest req) {
-        accessControlService.requireAttendanceAccess(currentUser, attendanceId);
+        UUID teamId = attendanceService.getAttendanceTeamId(attendanceId);
+        accessControlService.requireTeamAdmin(currentUser, teamId);
         try {
-            return ResponseEntity.ok(attendanceService.updateAttendance(attendanceId, req));
+            return ResponseEntity.ok(attendanceService.updateAttendance(attendanceId, req, currentUser.getId()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @GetMapping("/corrections/{attendanceId}")
+    public ResponseEntity<?> getCorrections(@PathVariable UUID attendanceId,
+                                             @AuthenticationPrincipal User currentUser) {
+        UUID teamId = attendanceService.getAttendanceTeamId(attendanceId);
+        accessControlService.requireTeamAdmin(currentUser, teamId);
+        return ResponseEntity.ok(attendanceService.getCorrections(attendanceId));
     }
 
     @GetMapping("/stages")

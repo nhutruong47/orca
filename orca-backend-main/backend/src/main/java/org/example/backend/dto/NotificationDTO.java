@@ -8,6 +8,7 @@ public class NotificationDTO {
     private String message;
     private String type;
     private String taskId;
+    private String actorId;
     private boolean isRead;
     private LocalDateTime createdAt;
 
@@ -26,6 +27,9 @@ public class NotificationDTO {
 
     public String getTaskId() { return taskId; }
     public void setTaskId(String taskId) { this.taskId = taskId; }
+
+    public String getActorId() { return actorId; }
+    public void setActorId(String actorId) { this.actorId = actorId; }
 
     public boolean isRead() { return isRead; }
     public void setRead(boolean read) { isRead = read; }

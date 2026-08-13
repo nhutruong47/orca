@@ -1,22 +1,25 @@
 package org.example.backend.service;
 
 import org.example.backend.dto.AttendanceDTO;
+import org.example.backend.dto.AttendanceCorrectionDTO;
 import org.example.backend.dto.UpdateAttendanceRequest;
 import org.example.backend.entity.Attendance;
+import org.example.backend.entity.AttendanceCorrection;
 import org.example.backend.entity.Attendance.ShiftType;
 import org.example.backend.entity.ProductionOrder;
 import org.example.backend.entity.Team;
 import org.example.backend.entity.User;
 import org.example.backend.repository.AttendanceRepository;
+import org.example.backend.repository.AttendanceCorrectionRepository;
 import org.example.backend.repository.ProductionOrderRepository;
 import org.example.backend.repository.TeamRepository;
 import org.example.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,33 +29,47 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class AttendanceService {
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final AttendanceRepository attendanceRepo;
     private final UserRepository userRepo;
     private final TeamRepository teamRepo;
     private final ProductionOrderRepository orderRepo;
+    private final AttendanceCorrectionRepository correctionRepo;
 
     private static final Map<ShiftType, String[]> SHIFT_HOURS = Map.of(
         ShiftType.SANG, new String[]{"06:00", "14:00"},
         ShiftType.CHIEU, new String[]{"14:00", "22:00"},
         ShiftType.DEM, new String[]{"22:00", "06:00"},
-        ShiftType.NGAY, new String[]{"06:00", "18:00"}
+        ShiftType.NGAY, new String[]{"08:00", "17:00"}
+    );
+
+    private static final Map<ShiftType, Integer> SHIFT_BREAK_MINUTES = Map.of(
+        ShiftType.SANG, 30,
+        ShiftType.CHIEU, 30,
+        ShiftType.DEM, 30,
+        ShiftType.NGAY, 60
     );
 
     public AttendanceService(AttendanceRepository attendanceRepo, UserRepository userRepo,
-                            TeamRepository teamRepo, ProductionOrderRepository orderRepo) {
+                            TeamRepository teamRepo, ProductionOrderRepository orderRepo,
+                            AttendanceCorrectionRepository correctionRepo) {
         this.attendanceRepo = attendanceRepo;
         this.userRepo = userRepo;
         this.teamRepo = teamRepo;
         this.orderRepo = orderRepo;
+        this.correctionRepo = correctionRepo;
     }
 
     public AttendanceDTO checkIn(UUID userId, UUID teamId, ShiftType shiftType,
                                  Attendance.ProductionStage stage, UUID orderId, Integer breakMinutes) {
-        LocalDate today = LocalDate.now();
-        Optional<Attendance> existing = attendanceRepo.findFirstByUserIdAndTeamIdAndDateAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId, teamId, today);
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        Optional<Attendance> existing = attendanceRepo.findFirstByUserIdAndTeamIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId, teamId);
         if (existing.isPresent()) {
             throw new RuntimeException("Ban dang trong ca lam, hay tan ca truoc khi vao ca moi");
+        }
+        if (attendanceRepo.findFirstByUserIdAndTeamIdAndDateOrderByCheckInTimeDesc(userId, teamId, today).isPresent()) {
+            throw new RuntimeException("Hôm nay bạn đã có một ca làm được ghi nhận");
         }
 
         User user = userRepo.findById(userId)
@@ -64,10 +81,11 @@ public class AttendanceService {
         a.setUser(user);
         a.setTeam(team);
         a.setDate(today);
-        a.setCheckInTime(LocalDateTime.now());
+        a.setCheckInTime(LocalDateTime.now(VIETNAM_ZONE));
         a.setShiftType(shiftType);
         a.setStage(stage);
-        a.setBreakMinutes(breakMinutes != null ? breakMinutes : 30);
+        // Break duration is server-owned configuration; never trust calculated time from the client.
+        a.setBreakMinutes(SHIFT_BREAK_MINUTES.getOrDefault(shiftType, 60));
 
         String[] hours = SHIFT_HOURS.get(shiftType);
         a.setShiftStartTime(hours[0]);
@@ -82,50 +100,22 @@ public class AttendanceService {
     }
 
     public AttendanceDTO checkOut(UUID userId, UUID teamId) {
-        LocalDate today = LocalDate.now();
-        Attendance a = attendanceRepo.findFirstByUserIdAndTeamIdAndDateAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId, teamId, today)
+        Attendance a = attendanceRepo.findFirstByUserIdAndTeamIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId, teamId)
                 .orElseThrow(() -> new RuntimeException("Ban chua vao ca hoac da tan ca"));
 
         if (a.getCheckOutTime() != null) {
             throw new RuntimeException("Ban da check-out hom nay roi");
         }
 
-        a.setCheckOutTime(LocalDateTime.now());
+        a.setCheckOutTime(LocalDateTime.now(VIETNAM_ZONE));
 
-        Duration workDuration = Duration.between(a.getCheckInTime(), a.getCheckOutTime());
-        double totalMinutes = workDuration.toMinutes();
-        double breakMins = a.getBreakMinutes() != null ? a.getBreakMinutes() : 30;
-        double actualWorkMinutes = Math.max(0, totalMinutes - breakMins);
-        double actualWorkHours = Math.round(actualWorkMinutes / 60.0 * 10.0) / 10.0;
-        a.setActualWorkHours(actualWorkHours);
-
-        double regularHours = Math.min(actualWorkHours, 8.0);
-        double overtimeHours = Math.max(0, actualWorkHours - 8.0);
-        a.setRegularHours(Math.round(regularHours * 10.0) / 10.0);
-        a.setOvertimeHours(Math.round(overtimeHours * 10.0) / 10.0);
-
-        if (a.getShiftType() != null) {
-            String expectedStart = a.getShiftStartTime();
-            if (expectedStart != null) {
-                int expectedHour = Integer.parseInt(expectedStart.split(":")[0]);
-                int actualHour = a.getCheckInTime().getHour();
-                if (actualHour > expectedHour) {
-                    a.setAttendanceStatus(Attendance.AttendanceStatus.LATE);
-                } else {
-                    a.setAttendanceStatus(Attendance.AttendanceStatus.ON_TIME);
-                }
-            } else {
-                a.setAttendanceStatus(Attendance.AttendanceStatus.ON_TIME);
-            }
-        } else {
-            a.setAttendanceStatus(Attendance.AttendanceStatus.ON_TIME);
-        }
+        recalculate(a);
 
         return toDTO(attendanceRepo.save(a));
     }
 
     public AttendanceDTO getTodayAttendance(UUID userId, UUID teamId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
         return attendanceRepo.findFirstByUserIdAndTeamIdAndDateAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId, teamId, today)
                 .or(() -> attendanceRepo.findFirstByUserIdAndTeamIdAndDateOrderByCheckInTimeDesc(userId, teamId, today))
                 .map(this::toDTO)
@@ -140,8 +130,13 @@ public class AttendanceService {
     }
 
     public List<AttendanceDTO> getTeamAttendanceToday(UUID teamId) {
-        LocalDate today = LocalDate.now();
-        return attendanceRepo.findByTeamIdAndDate(teamId, today).stream()
+        return getTeamAttendanceByDate(teamId, LocalDate.now(VIETNAM_ZONE));
+    }
+
+    public List<AttendanceDTO> getTeamAttendanceByDate(UUID teamId, LocalDate date) {
+        LocalDate selectedDate = date == null ? LocalDate.now(VIETNAM_ZONE) : date;
+        return attendanceRepo.findByTeamIdAndDate(teamId, selectedDate).stream()
+                .sorted((a, b) -> a.getUser().getFullName().compareToIgnoreCase(b.getUser().getFullName()))
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
@@ -153,37 +148,83 @@ public class AttendanceService {
                 .collect(Collectors.toList());
     }
 
-    public AttendanceDTO updateAttendance(UUID attendanceId, UpdateAttendanceRequest req) {
+    @Transactional(readOnly = true)
+    public UUID getAttendanceTeamId(UUID attendanceId) {
+        return attendanceRepo.findById(attendanceId)
+                .map(attendance -> attendance.getTeam().getId())
+                .orElseThrow(() -> new RuntimeException("Attendance record not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrectionDTO> getCorrections(UUID attendanceId) {
+        if (!attendanceRepo.existsById(attendanceId)) {
+            throw new RuntimeException("Attendance record not found");
+        }
+        return correctionRepo.findByAttendanceIdOrderByCreatedAtDesc(attendanceId).stream().map(correction -> {
+            AttendanceCorrectionDTO dto = new AttendanceCorrectionDTO();
+            dto.setId(correction.getId());
+            String actorName = correction.getActor().getFullName();
+            dto.setActorName(actorName == null || actorName.isBlank() ? correction.getActor().getUsername() : actorName);
+            dto.setOldCheckInTime(correction.getOldCheckInTime());
+            dto.setOldCheckOutTime(correction.getOldCheckOutTime());
+            dto.setNewCheckInTime(correction.getNewCheckInTime());
+            dto.setNewCheckOutTime(correction.getNewCheckOutTime());
+            dto.setReason(correction.getReason());
+            dto.setCreatedAt(correction.getCreatedAt());
+            return dto;
+        }).toList();
+    }
+
+    public AttendanceDTO updateAttendance(UUID attendanceId, UpdateAttendanceRequest req, UUID actorId) {
         Attendance a = attendanceRepo.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance record not found"));
-        
-        if (req.getCheckInTime() != null) {
-            a.setCheckInTime(req.getCheckInTime());
+        if (req.getCheckInTime() == null || req.getCheckOutTime() == null) {
+            throw new RuntimeException("Cần nhập đầy đủ giờ vào và giờ ra");
         }
-        if (req.getCheckOutTime() != null) {
-            a.setCheckOutTime(req.getCheckOutTime());
+        String reason = req.getReason() == null ? "" : req.getReason().trim();
+        if (reason.length() < 5 || reason.length() > 500) {
+            throw new RuntimeException("Lý do sửa công phải từ 5 đến 500 ký tự");
         }
-
-        if (a.getCheckInTime() != null && a.getCheckOutTime() != null) {
-            Duration workDuration = Duration.between(a.getCheckInTime(), a.getCheckOutTime());
-            double totalMinutes = workDuration.toMinutes();
-            double breakMins = a.getBreakMinutes() != null ? a.getBreakMinutes() : 30;
-            double actualWorkMinutes = Math.max(0, totalMinutes - breakMins);
-            double actualWorkHours = Math.round(actualWorkMinutes / 60.0 * 10.0) / 10.0;
-            a.setActualWorkHours(actualWorkHours);
-
-            double regularHours = Math.min(actualWorkHours, 8.0);
-            double overtimeHours = Math.max(0, actualWorkHours - 8.0);
-            a.setRegularHours(Math.round(regularHours * 10.0) / 10.0);
-            a.setOvertimeHours(Math.round(overtimeHours * 10.0) / 10.0);
-        } else {
-            a.setActualWorkHours(0.0);
-            a.setRegularHours(0.0);
-            a.setOvertimeHours(0.0);
+        if (!req.getCheckOutTime().isAfter(req.getCheckInTime())) {
+            throw new RuntimeException("Giờ ra phải sau giờ vào");
         }
-
+        LocalDateTime oldCheckIn = a.getCheckInTime();
+        LocalDateTime oldCheckOut = a.getCheckOutTime();
+        a.setCheckInTime(req.getCheckInTime());
+        a.setCheckOutTime(req.getCheckOutTime());
+        a.setDate(req.getCheckInTime().toLocalDate());
+        recalculate(a);
         attendanceRepo.save(a);
+
+        AttendanceCorrection correction = new AttendanceCorrection();
+        correction.setAttendance(a);
+        correction.setActor(userRepo.findById(actorId).orElseThrow(() -> new RuntimeException("User not found")));
+        correction.setOldCheckInTime(oldCheckIn);
+        correction.setOldCheckOutTime(oldCheckOut);
+        correction.setNewCheckInTime(a.getCheckInTime());
+        correction.setNewCheckOutTime(a.getCheckOutTime());
+        correction.setReason(reason);
+        correctionRepo.save(correction);
         return toDTO(a);
+    }
+
+    private void recalculate(Attendance attendance) {
+        AttendanceCalculator.Result result = AttendanceCalculator.calculate(
+                attendance.getCheckInTime(), attendance.getCheckOutTime(),
+                attendance.getBreakMinutes() == null ? 60 : attendance.getBreakMinutes());
+        attendance.setActualWorkHours(result.totalHours().doubleValue());
+        attendance.setRegularHours(result.regularHours().doubleValue());
+        attendance.setOvertimeHours(result.overtimeHours().doubleValue());
+        String expectedStart = attendance.getShiftStartTime();
+        if (expectedStart != null) {
+            String[] parts = expectedStart.split(":");
+            LocalDateTime scheduled = attendance.getCheckInTime().toLocalDate()
+                    .atTime(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+            attendance.setAttendanceStatus(attendance.getCheckInTime().isAfter(scheduled.plusMinutes(5))
+                    ? Attendance.AttendanceStatus.LATE : Attendance.AttendanceStatus.ON_TIME);
+        } else {
+            attendance.setAttendanceStatus(Attendance.AttendanceStatus.ON_TIME);
+        }
     }
 
     public Map<String, Double> getStageWorkerHours(UUID teamId, LocalDate date) {
@@ -224,7 +265,11 @@ public class AttendanceService {
         dto.setActualWorkHours(a.getActualWorkHours());
         dto.setRegularHours(a.getRegularHours());
         dto.setOvertimeHours(a.getOvertimeHours());
-        dto.setAttendanceStatus(a.getAttendanceStatus() != null ? a.getAttendanceStatus().name() : null);
+        String status = a.getAttendanceStatus() != null ? a.getAttendanceStatus().name() : null;
+        if (a.getCheckInTime() != null && a.getCheckOutTime() == null && a.getDate().isBefore(LocalDate.now(VIETNAM_ZONE))) {
+            status = Attendance.AttendanceStatus.MISSING_CHECKOUT.name();
+        }
+        dto.setAttendanceStatus(status);
         dto.setNotes(a.getNotes());
         return dto;
     }
