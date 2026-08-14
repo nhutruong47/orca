@@ -15,6 +15,6 @@ public final class PayrollCalculator {
     }
 
     public static long net(long regularPay, long overtimePay, long allowance, long deduction, long advance) {
-        return Math.max(0L, Math.addExact(Math.addExact(regularPay, overtimePay), allowance) - deduction - advance);
+        return Math.addExact(Math.addExact(regularPay, overtimePay), allowance) - deduction - advance;
     }
 }

@@ -118,10 +118,20 @@ public class PayrollService {
         PayrollRun run = requireEditableRun(runId);
         PayrollItem item = itemRepository.findByPayrollRunIdAndUserId(runId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dòng lương"));
+        long totalBeforeDeductions = Math.addExact(Math.addExact(item.getRegularPayVnd(), item.getOvertimePayVnd()), allowanceVnd);
+        long totalDeductions = Math.addExact(deductionVnd, advanceVnd);
+        if (totalDeductions > totalBeforeDeductions) {
+            throw badRequest("Khoản trừ không được lớn hơn tiền lương và tiền thưởng của kỳ này");
+        }
+        String cleanedNote = cleanNote(note);
+        if ((allowanceVnd > 0 || deductionVnd > 0 || advanceVnd > 0)
+                && (cleanedNote == null || cleanedNote.length() < 5)) {
+            throw badRequest("Lý do điều chỉnh phải có ít nhất 5 ký tự");
+        }
         item.setAllowanceVnd(allowanceVnd);
         item.setDeductionVnd(deductionVnd);
         item.setAdvanceVnd(advanceVnd);
-        item.setNote(cleanNote(note));
+        item.setNote(cleanedNote);
         recalculateItem(item);
         itemRepository.save(item);
         recalculateRun(run);
@@ -378,6 +388,7 @@ public class PayrollService {
 
     private void syncAttendanceLines(PayrollItem item, List<Attendance> records) {
         attendanceLineRepository.deleteAll(attendanceLineRepository.findByPayrollItemId(item.getId()));
+        attendanceLineRepository.flush();
         for (Attendance attendance : records.stream()
                 .sorted(Comparator.comparing(Attendance::getDate)
                         .thenComparing(Attendance::getCheckInTime, Comparator.nullsLast(Comparator.naturalOrder())))

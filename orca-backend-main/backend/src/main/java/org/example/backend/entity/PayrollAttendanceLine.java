@@ -7,8 +7,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "payroll_attendance_lines", indexes =
-        @Index(name = "idx_payroll_attendance_item_date", columnList = "payroll_item_id, attendance_date"))
+@Table(name = "payroll_attendance_lines",
+        indexes = @Index(name = "idx_payroll_attendance_item_date", columnList = "payroll_item_id, attendance_date"),
+        uniqueConstraints = @UniqueConstraint(name = "uk_payroll_attendance_source", columnNames = {"payroll_item_id", "source_attendance_id"}))
 public class PayrollAttendanceLine {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
