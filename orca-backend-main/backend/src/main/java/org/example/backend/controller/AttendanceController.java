@@ -1,6 +1,7 @@
 package org.example.backend.controller;
 
 import org.example.backend.dto.AttendanceDTO;
+import org.example.backend.dto.AttendanceSettingsDTO;
 import org.example.backend.dto.UpdateAttendanceRequest;
 import org.example.backend.entity.Attendance;
 import org.example.backend.entity.User;
@@ -128,6 +129,25 @@ public class AttendanceController {
         accessControlService.requireTeamAdmin(currentUser, teamId);
         try {
             return ResponseEntity.ok(attendanceService.updateAttendance(attendanceId, req, currentUser.getId()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/settings/{teamId}")
+    public ResponseEntity<?> getSettings(@PathVariable UUID teamId,
+                                         @AuthenticationPrincipal User currentUser) {
+        accessControlService.requireTeamMember(currentUser, teamId);
+        return ResponseEntity.ok(attendanceService.getSettings(teamId));
+    }
+
+    @PutMapping("/settings/{teamId}")
+    public ResponseEntity<?> updateSettings(@PathVariable UUID teamId,
+                                            @AuthenticationPrincipal User currentUser,
+                                            @RequestBody AttendanceSettingsDTO request) {
+        accessControlService.requireTeamAdmin(currentUser, teamId);
+        try {
+            return ResponseEntity.ok(attendanceService.updateSettings(teamId, request));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

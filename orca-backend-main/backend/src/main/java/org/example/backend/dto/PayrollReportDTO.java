@@ -67,6 +67,7 @@ public class PayrollReportDTO {
         private UUID itemId;
         private UUID memberId;
         private String memberName;
+        private String memberCode;
         private BigDecimal regularHours;
         private BigDecimal overtimeHours;
         private int attendanceDays;
@@ -90,6 +91,8 @@ public class PayrollReportDTO {
         public void setMemberId(UUID memberId) { this.memberId = memberId; }
         public String getMemberName() { return memberName; }
         public void setMemberName(String memberName) { this.memberName = memberName; }
+        public String getMemberCode() { return memberCode; }
+        public void setMemberCode(String memberCode) { this.memberCode = memberCode; }
         public BigDecimal getRegularHours() { return regularHours; }
         public void setRegularHours(BigDecimal regularHours) { this.regularHours = regularHours; }
         public BigDecimal getOvertimeHours() { return overtimeHours; }
@@ -134,6 +137,12 @@ public class PayrollReportDTO {
         private LocalDateTime overtimeStartTime;
         private BigDecimal regularHours;
         private BigDecimal overtimeHours;
+        private BigDecimal workedHours;
+        private long hourlyRateVnd;
+        private BigDecimal overtimeMultiplier;
+        private long regularPayVnd;
+        private long overtimePayVnd;
+        private long totalPayVnd;
         private String attendanceStatus;
         private String shiftType;
         private String productionStage;
@@ -152,6 +161,18 @@ public class PayrollReportDTO {
         public void setRegularHours(BigDecimal regularHours) { this.regularHours = regularHours; }
         public BigDecimal getOvertimeHours() { return overtimeHours; }
         public void setOvertimeHours(BigDecimal overtimeHours) { this.overtimeHours = overtimeHours; }
+        public BigDecimal getWorkedHours() { return workedHours; }
+        public void setWorkedHours(BigDecimal workedHours) { this.workedHours = workedHours; }
+        public long getHourlyRateVnd() { return hourlyRateVnd; }
+        public void setHourlyRateVnd(long hourlyRateVnd) { this.hourlyRateVnd = hourlyRateVnd; }
+        public BigDecimal getOvertimeMultiplier() { return overtimeMultiplier; }
+        public void setOvertimeMultiplier(BigDecimal overtimeMultiplier) { this.overtimeMultiplier = overtimeMultiplier; }
+        public long getRegularPayVnd() { return regularPayVnd; }
+        public void setRegularPayVnd(long regularPayVnd) { this.regularPayVnd = regularPayVnd; }
+        public long getOvertimePayVnd() { return overtimePayVnd; }
+        public void setOvertimePayVnd(long overtimePayVnd) { this.overtimePayVnd = overtimePayVnd; }
+        public long getTotalPayVnd() { return totalPayVnd; }
+        public void setTotalPayVnd(long totalPayVnd) { this.totalPayVnd = totalPayVnd; }
         public String getAttendanceStatus() { return attendanceStatus; }
         public void setAttendanceStatus(String attendanceStatus) { this.attendanceStatus = attendanceStatus; }
         public String getShiftType() { return shiftType; }

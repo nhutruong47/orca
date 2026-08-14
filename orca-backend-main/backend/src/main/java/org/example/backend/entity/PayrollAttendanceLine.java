@@ -31,6 +31,14 @@ public class PayrollAttendanceLine {
     private BigDecimal regularHours = BigDecimal.ZERO;
     @Column(name = "overtime_hours", nullable = false, precision = 10, scale = 2)
     private BigDecimal overtimeHours = BigDecimal.ZERO;
+    @Column(name = "hourly_rate_vnd")
+    private Long hourlyRateVnd;
+    @Column(name = "overtime_multiplier", precision = 4, scale = 2)
+    private BigDecimal overtimeMultiplier;
+    @Column(name = "regular_pay_vnd")
+    private Long regularPayVnd;
+    @Column(name = "overtime_pay_vnd")
+    private Long overtimePayVnd;
     @Column(name = "attendance_status", length = 30)
     private String attendanceStatus;
     @Column(name = "shift_type", length = 20)
@@ -55,6 +63,14 @@ public class PayrollAttendanceLine {
     public void setRegularHours(BigDecimal regularHours) { this.regularHours = regularHours; }
     public BigDecimal getOvertimeHours() { return overtimeHours; }
     public void setOvertimeHours(BigDecimal overtimeHours) { this.overtimeHours = overtimeHours; }
+    public Long getHourlyRateVnd() { return hourlyRateVnd; }
+    public void setHourlyRateVnd(Long hourlyRateVnd) { this.hourlyRateVnd = hourlyRateVnd; }
+    public BigDecimal getOvertimeMultiplier() { return overtimeMultiplier; }
+    public void setOvertimeMultiplier(BigDecimal overtimeMultiplier) { this.overtimeMultiplier = overtimeMultiplier; }
+    public Long getRegularPayVnd() { return regularPayVnd; }
+    public void setRegularPayVnd(Long regularPayVnd) { this.regularPayVnd = regularPayVnd; }
+    public Long getOvertimePayVnd() { return overtimePayVnd; }
+    public void setOvertimePayVnd(Long overtimePayVnd) { this.overtimePayVnd = overtimePayVnd; }
     public String getAttendanceStatus() { return attendanceStatus; }
     public void setAttendanceStatus(String attendanceStatus) { this.attendanceStatus = attendanceStatus; }
     public String getShiftType() { return shiftType; }

@@ -1,5 +1,6 @@
 package org.example.backend.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -18,9 +19,16 @@ public class AttendanceDTO {
     private String orderId;
     private String orderTitle;
     private Integer breakMinutes;
+    private Double standardHours;
     private Double actualWorkHours;
+    private Double workedHours;
     private Double regularHours;
     private Double overtimeHours;
+    private Long hourlyRateVnd;
+    private BigDecimal overtimeMultiplier;
+    private Long regularPayVnd;
+    private Long overtimePayVnd;
+    private Long totalPayVnd;
     private String attendanceStatus;
     private String notes;
 
@@ -52,12 +60,26 @@ public class AttendanceDTO {
     public void setOrderTitle(String orderTitle) { this.orderTitle = orderTitle; }
     public Integer getBreakMinutes() { return breakMinutes; }
     public void setBreakMinutes(Integer breakMinutes) { this.breakMinutes = breakMinutes; }
+    public Double getStandardHours() { return standardHours; }
+    public void setStandardHours(Double standardHours) { this.standardHours = standardHours; }
     public Double getActualWorkHours() { return actualWorkHours; }
     public void setActualWorkHours(Double actualWorkHours) { this.actualWorkHours = actualWorkHours; }
+    public Double getWorkedHours() { return workedHours; }
+    public void setWorkedHours(Double workedHours) { this.workedHours = workedHours; }
     public Double getRegularHours() { return regularHours; }
     public void setRegularHours(Double regularHours) { this.regularHours = regularHours; }
     public Double getOvertimeHours() { return overtimeHours; }
     public void setOvertimeHours(Double overtimeHours) { this.overtimeHours = overtimeHours; }
+    public Long getHourlyRateVnd() { return hourlyRateVnd; }
+    public void setHourlyRateVnd(Long hourlyRateVnd) { this.hourlyRateVnd = hourlyRateVnd; }
+    public BigDecimal getOvertimeMultiplier() { return overtimeMultiplier; }
+    public void setOvertimeMultiplier(BigDecimal overtimeMultiplier) { this.overtimeMultiplier = overtimeMultiplier; }
+    public Long getRegularPayVnd() { return regularPayVnd; }
+    public void setRegularPayVnd(Long regularPayVnd) { this.regularPayVnd = regularPayVnd; }
+    public Long getOvertimePayVnd() { return overtimePayVnd; }
+    public void setOvertimePayVnd(Long overtimePayVnd) { this.overtimePayVnd = overtimePayVnd; }
+    public Long getTotalPayVnd() { return totalPayVnd; }
+    public void setTotalPayVnd(Long totalPayVnd) { this.totalPayVnd = totalPayVnd; }
     public String getAttendanceStatus() { return attendanceStatus; }
     public void setAttendanceStatus(String attendanceStatus) { this.attendanceStatus = attendanceStatus; }
     public String getNotes() { return notes; }

@@ -30,7 +30,7 @@ public class PayrollService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository memberRepository;
     private final AttendanceRepository attendanceRepository;
-    private final TaskRepository taskRepository;
+    private final AttendanceSettingsRepository attendanceSettingsRepository;
     private final UserRepository userRepository;
     private final PayrollProfileRepository profileRepository;
     private final PayrollRunRepository runRepository;
@@ -41,7 +41,7 @@ public class PayrollService {
     public PayrollService(TeamRepository teamRepository,
                           TeamMemberRepository memberRepository,
                           AttendanceRepository attendanceRepository,
-                          TaskRepository taskRepository,
+                          AttendanceSettingsRepository attendanceSettingsRepository,
                           UserRepository userRepository,
                           PayrollProfileRepository profileRepository,
                           PayrollRunRepository runRepository,
@@ -51,7 +51,7 @@ public class PayrollService {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.attendanceRepository = attendanceRepository;
-        this.taskRepository = taskRepository;
+        this.attendanceSettingsRepository = attendanceSettingsRepository;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.runRepository = runRepository;
@@ -68,14 +68,11 @@ public class PayrollService {
         return toDto(run);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PayrollReportDTO.Item getMyPayslip(UUID teamId, UUID userId, Integer year, Integer month) {
         YearMonth period = normalizePeriod(year, month);
-        PayrollRun run = runRepository.findByTeamIdAndYearAndMonth(teamId, period.getYear(), period.getMonthValue())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kỳ lương chưa được tạo"));
-        if (run.getStatus() == PayrollRun.Status.DRAFT || run.getStatus() == PayrollRun.Status.CALCULATED) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Phiếu lương chỉ hiển thị sau khi quản lý chốt kỳ");
-        }
+        PayrollRun run = getOrCreateRun(teamId, period);
+        if (run.getStatus() == PayrollRun.Status.DRAFT || run.getStatus() == PayrollRun.Status.CALCULATED) syncDraft(run);
         PayrollItem item = itemRepository.findByPayrollRunIdAndUserId(run.getId(), userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không có phiếu lương"));
         return toItemDto(item);
@@ -205,8 +202,8 @@ public class PayrollService {
         PayrollReportDTO report = getReport(teamId, year, month);
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Bang luong");
-            String[] headers = {"Nhân viên", "Ngày công", "Giờ thường", "Tăng ca", "Đơn giá/giờ",
-                    "Lương thường", "Lương tăng ca", "Phụ cấp", "Khấu trừ", "Tạm ứng", "Thực nhận", "Ghi chú"};
+            String[] headers = {"Mã nhân viên", "Nhân viên", "Ngày công", "Giờ thường", "Giờ tăng ca",
+                    "Lương thường", "Lương tăng ca", "Thực nhận"};
             Row header = sheet.createRow(0);
             CellStyle headerStyle = workbook.createCellStyle();
             Font font = workbook.createFont(); font.setBold(true); headerStyle.setFont(font);
@@ -214,29 +211,25 @@ public class PayrollService {
             int rowIndex = 1;
             for (PayrollReportDTO.Item item : report.getItems()) {
                 Row row = sheet.createRow(rowIndex++);
-                row.createCell(0).setCellValue(item.getMemberName());
-                row.createCell(1).setCellValue(item.getAttendanceDays());
-                row.createCell(2).setCellValue(item.getRegularHours().doubleValue());
-                row.createCell(3).setCellValue(item.getOvertimeHours().doubleValue());
-                row.createCell(4).setCellValue(item.getHourlyRateVnd());
+                row.createCell(0).setCellValue(item.getMemberCode());
+                row.createCell(1).setCellValue(item.getMemberName());
+                row.createCell(2).setCellValue(item.getAttendanceDays());
+                row.createCell(3).setCellValue(item.getRegularHours().doubleValue());
+                row.createCell(4).setCellValue(item.getOvertimeHours().doubleValue());
                 row.createCell(5).setCellValue(item.getRegularPayVnd());
                 row.createCell(6).setCellValue(item.getOvertimePayVnd());
-                row.createCell(7).setCellValue(item.getAllowanceVnd());
-                row.createCell(8).setCellValue(item.getDeductionVnd());
-                row.createCell(9).setCellValue(item.getAdvanceVnd());
-                row.createCell(10).setCellValue(item.getNetPayVnd());
-                row.createCell(11).setCellValue(item.getNote() == null ? "" : item.getNote());
+                row.createCell(7).setCellValue(item.getNetPayVnd());
             }
             Row total = sheet.createRow(rowIndex);
             total.createCell(0).setCellValue("TỔNG CỘNG");
-            total.createCell(2).setCellValue(report.getSummary().getRegularHours().doubleValue());
-            total.createCell(3).setCellValue(report.getSummary().getOvertimeHours().doubleValue());
-            total.createCell(10).setCellValue(report.getSummary().getNetPayVnd());
+            total.createCell(3).setCellValue(report.getSummary().getRegularHours().doubleValue());
+            total.createCell(4).setCellValue(report.getSummary().getOvertimeHours().doubleValue());
+            total.createCell(7).setCellValue(report.getSummary().getNetPayVnd());
             for (int i = 0; i < headers.length; i++) sheet.autoSizeColumn(i);
 
             Sheet attendanceSheet = workbook.createSheet("Chi tiet cham cong");
-            String[] attendanceHeaders = {"Nhân viên", "Ngày", "Vào ca", "Ra ca", "Giờ thường",
-                    "Bắt đầu tăng ca", "Kết thúc tăng ca", "Giờ tăng ca", "Trạng thái", "Được tính lương"};
+            String[] attendanceHeaders = {"Mã nhân viên", "Nhân viên", "Ngày", "Giờ vào", "Giờ ra",
+                    "Giờ thường", "Giờ tăng ca", "Thực nhận"};
             Row attendanceHeader = attendanceSheet.createRow(0);
             for (int i = 0; i < attendanceHeaders.length; i++) {
                 Cell cell = attendanceHeader.createCell(i); cell.setCellValue(attendanceHeaders[i]); cell.setCellStyle(headerStyle);
@@ -245,16 +238,14 @@ public class PayrollService {
             for (PayrollReportDTO.Item item : report.getItems()) {
                 for (PayrollReportDTO.AttendanceLine line : item.getAttendanceLines()) {
                     Row row = attendanceSheet.createRow(attendanceRowIndex++);
-                    row.createCell(0).setCellValue(item.getMemberName());
-                    row.createCell(1).setCellValue(line.getDate());
-                    row.createCell(2).setCellValue(line.getCheckInTime() == null ? "" : line.getCheckInTime().toLocalTime().toString());
-                    row.createCell(3).setCellValue(line.getCheckOutTime() == null ? "" : line.getCheckOutTime().toLocalTime().toString());
-                    row.createCell(4).setCellValue(line.getRegularHours().doubleValue());
-                    row.createCell(5).setCellValue(line.getOvertimeStartTime() == null ? "" : line.getOvertimeStartTime().toLocalTime().toString());
-                    row.createCell(6).setCellValue(line.getOvertimeHours().signum() > 0 && line.getCheckOutTime() != null ? line.getCheckOutTime().toLocalTime().toString() : "");
-                    row.createCell(7).setCellValue(line.getOvertimeHours().doubleValue());
-                    row.createCell(8).setCellValue(line.getAttendanceStatus() == null ? "" : line.getAttendanceStatus());
-                    row.createCell(9).setCellValue(line.isPayable() ? "Có" : "Không");
+                    row.createCell(0).setCellValue(item.getMemberCode());
+                    row.createCell(1).setCellValue(item.getMemberName());
+                    row.createCell(2).setCellValue(line.getDate());
+                    row.createCell(3).setCellValue(line.getCheckInTime() == null ? "" : line.getCheckInTime().toLocalTime().toString());
+                    row.createCell(4).setCellValue(line.getCheckOutTime() == null ? "" : line.getCheckOutTime().toLocalTime().toString());
+                    row.createCell(5).setCellValue(line.getRegularHours().doubleValue());
+                    row.createCell(6).setCellValue(line.getOvertimeHours().doubleValue());
+                    row.createCell(7).setCellValue(line.getTotalPayVnd());
                 }
             }
             for (int i = 0; i < attendanceHeaders.length; i++) attendanceSheet.autoSizeColumn(i);
@@ -284,18 +275,14 @@ public class PayrollService {
         Map<UUID, List<Attendance>> attendanceByUser = attendanceRepository
                 .findByTeamIdAndDateBetween(run.getTeam().getId(), start, end).stream()
                 .collect(Collectors.groupingBy(a -> a.getUser().getId()));
-        Map<UUID, List<Task>> tasksByUser = taskRepository.findByGoalTeamId(run.getTeam().getId()).stream()
-                .filter(task -> task.getMember() != null && isTaskInPeriod(task, period))
-                .collect(Collectors.groupingBy(task -> task.getMember().getId()));
-        Map<UUID, PayrollProfile> profiles = profileRepository.findByTeamId(run.getTeam().getId()).stream()
-                .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity()));
+        AttendanceSettings settings = attendanceSettingsRepository.findByTeamId(run.getTeam().getId())
+                .orElseGet(() -> defaultAttendanceSettings(run.getTeam()));
         Map<UUID, PayrollItem> existing = itemRepository.findByPayrollRunId(run.getId()).stream()
                 .collect(Collectors.toMap(item -> item.getUser().getId(), Function.identity()));
         Set<UUID> activeUsers = new HashSet<>();
 
         for (TeamMember member : members) {
             UUID userId = member.getUser().getId(); activeUsers.add(userId);
-            PayrollProfile profile = profiles.computeIfAbsent(userId, ignored -> profileRepository.save(newProfile(run.getTeam(), member.getUser())));
             PayrollItem item = existing.getOrDefault(userId, new PayrollItem());
             if (item.getId() == null) { item.setPayrollRun(run); item.setUser(member.getUser()); }
             item.setMemberNameSnapshot(displayName(member.getUser()));
@@ -307,12 +294,13 @@ public class PayrollService {
             item.setLateDays((int) records.stream().filter(a -> a.getAttendanceStatus() == Attendance.AttendanceStatus.LATE).count());
             item.setMissingCheckoutDays((int) records.stream().filter(a -> a.getCheckOutTime() == null
                     || a.getAttendanceStatus() == Attendance.AttendanceStatus.MISSING_CHECKOUT).count());
-            List<Task> tasks = tasksByUser.getOrDefault(userId, List.of());
-            item.setTotalTasks(tasks.size());
-            item.setCompletedTasks((int) tasks.stream().filter(t -> "COMPLETED".equalsIgnoreCase(t.getStatus())).count());
-            item.setHourlyRateVnd(profile.getHourlyRateVnd());
-            item.setOvertimeMultiplier(profile.getOvertimeMultiplier());
-            recalculateItem(item);
+            item.setTotalTasks(0);
+            item.setCompletedTasks(0);
+            item.setAllowanceVnd(0L);
+            item.setDeductionVnd(0L);
+            item.setAdvanceVnd(0L);
+            item.setNote(null);
+            applyPayFromAttendance(item, payable, settings);
             item = itemRepository.save(item);
             syncAttendanceLines(item, records);
         }
@@ -336,8 +324,35 @@ public class PayrollService {
         long regular = PayrollCalculator.multiply(item.getRegularHours(), item.getHourlyRateVnd(), BigDecimal.ONE);
         long overtime = PayrollCalculator.multiply(item.getOvertimeHours(), item.getHourlyRateVnd(), item.getOvertimeMultiplier());
         item.setRegularPayVnd(regular); item.setOvertimePayVnd(overtime);
-        item.setNetPayVnd(PayrollCalculator.net(regular, overtime, safe(item.getAllowanceVnd()),
-                safe(item.getDeductionVnd()), safe(item.getAdvanceVnd())));
+        item.setNetPayVnd(Math.addExact(regular, overtime));
+    }
+
+    private void applyPayFromAttendance(PayrollItem item, List<Attendance> payable, AttendanceSettings settings) {
+        long fallbackRate = settings.getHourlyRateVnd() == null
+                ? AttendanceSettings.DEFAULT_HOURLY_RATE_VND : settings.getHourlyRateVnd();
+        BigDecimal fallbackMultiplier = settings.getOvertimeMultiplier() == null
+                ? AttendanceSettings.DEFAULT_OVERTIME_MULTIPLIER : settings.getOvertimeMultiplier();
+        Attendance first = payable.stream().min(Comparator.comparing(Attendance::getDate)).orElse(null);
+        item.setHourlyRateVnd(first == null || first.getHourlyRateVndSnapshot() == null
+                ? fallbackRate : first.getHourlyRateVndSnapshot());
+        item.setOvertimeMultiplier(first == null || first.getOvertimeMultiplierSnapshot() == null
+                ? fallbackMultiplier : first.getOvertimeMultiplierSnapshot());
+
+        long regularPay = 0L;
+        long overtimePay = 0L;
+        for (Attendance attendance : payable) {
+            long rate = attendance.getHourlyRateVndSnapshot() == null
+                    ? fallbackRate : attendance.getHourlyRateVndSnapshot();
+            BigDecimal multiplier = attendance.getOvertimeMultiplierSnapshot() == null
+                    ? fallbackMultiplier : attendance.getOvertimeMultiplierSnapshot();
+            BigDecimal regularHours = BigDecimal.valueOf(attendance.getRegularHours() == null ? 0 : attendance.getRegularHours());
+            BigDecimal overtimeHours = BigDecimal.valueOf(attendance.getOvertimeHours() == null ? 0 : attendance.getOvertimeHours());
+            regularPay = Math.addExact(regularPay, PayrollCalculator.multiply(regularHours, rate, BigDecimal.ONE));
+            overtimePay = Math.addExact(overtimePay, PayrollCalculator.multiply(overtimeHours, rate, multiplier));
+        }
+        item.setRegularPayVnd(regularPay);
+        item.setOvertimePayVnd(overtimePay);
+        item.setNetPayVnd(Math.addExact(regularPay, overtimePay));
     }
 
     private void recalculateRun(PayrollRun run) {
@@ -376,6 +391,7 @@ public class PayrollService {
     private PayrollReportDTO.Item toItemDto(PayrollItem item) {
         PayrollReportDTO.Item dto = new PayrollReportDTO.Item();
         dto.setItemId(item.getId()); dto.setMemberId(item.getUser().getId()); dto.setMemberName(item.getMemberNameSnapshot());
+        dto.setMemberCode("NV-" + item.getUser().getId().toString().substring(0, 6).toUpperCase(Locale.ROOT));
         dto.setRegularHours(item.getRegularHours()); dto.setOvertimeHours(item.getOvertimeHours()); dto.setAttendanceDays(item.getAttendanceDays());
         dto.setLateDays(item.getLateDays()); dto.setMissingCheckoutDays(item.getMissingCheckoutDays());
         dto.setTotalTasks(item.getTotalTasks()); dto.setCompletedTasks(item.getCompletedTasks()); dto.setHourlyRateVnd(item.getHourlyRateVnd());
@@ -401,6 +417,14 @@ public class PayrollService {
             line.setCheckOutTime(attendance.getCheckOutTime());
             line.setRegularHours(BigDecimal.valueOf(attendance.getRegularHours() == null ? 0 : attendance.getRegularHours()).setScale(2, RoundingMode.HALF_UP));
             line.setOvertimeHours(BigDecimal.valueOf(attendance.getOvertimeHours() == null ? 0 : attendance.getOvertimeHours()).setScale(2, RoundingMode.HALF_UP));
+            long hourlyRate = attendance.getHourlyRateVndSnapshot() == null
+                    ? AttendanceSettings.DEFAULT_HOURLY_RATE_VND : attendance.getHourlyRateVndSnapshot();
+            BigDecimal overtimeMultiplier = attendance.getOvertimeMultiplierSnapshot() == null
+                    ? AttendanceSettings.DEFAULT_OVERTIME_MULTIPLIER : attendance.getOvertimeMultiplierSnapshot();
+            line.setHourlyRateVnd(hourlyRate);
+            line.setOvertimeMultiplier(overtimeMultiplier);
+            line.setRegularPayVnd(PayrollCalculator.multiply(line.getRegularHours(), hourlyRate, BigDecimal.ONE));
+            line.setOvertimePayVnd(PayrollCalculator.multiply(line.getOvertimeHours(), hourlyRate, overtimeMultiplier));
             line.setAttendanceStatus(attendance.getAttendanceStatus() == null ? null : attendance.getAttendanceStatus().name());
             line.setShiftType(attendance.getShiftType() == null ? null : attendance.getShiftType().name());
             line.setProductionStage(attendance.getStage() == null ? null : attendance.getStage().name());
@@ -423,6 +447,22 @@ public class PayrollService {
                     }
                     dto.setRegularHours(line.getRegularHours());
                     dto.setOvertimeHours(line.getOvertimeHours());
+                    dto.setWorkedHours(line.getRegularHours().add(line.getOvertimeHours()));
+                    long hourlyRate = line.getHourlyRateVnd() == null
+                            ? item.getHourlyRateVnd() : line.getHourlyRateVnd();
+                    BigDecimal overtimeMultiplier = line.getOvertimeMultiplier() == null
+                            ? item.getOvertimeMultiplier() : line.getOvertimeMultiplier();
+                    long regularPay = line.getRegularPayVnd() == null
+                            ? PayrollCalculator.multiply(line.getRegularHours(), hourlyRate, BigDecimal.ONE)
+                            : line.getRegularPayVnd();
+                    long overtimePay = line.getOvertimePayVnd() == null
+                            ? PayrollCalculator.multiply(line.getOvertimeHours(), hourlyRate, overtimeMultiplier)
+                            : line.getOvertimePayVnd();
+                    dto.setHourlyRateVnd(hourlyRate);
+                    dto.setOvertimeMultiplier(overtimeMultiplier);
+                    dto.setRegularPayVnd(regularPay);
+                    dto.setOvertimePayVnd(overtimePay);
+                    dto.setTotalPayVnd(Math.addExact(regularPay, overtimePay));
                     dto.setAttendanceStatus(line.getAttendanceStatus());
                     dto.setShiftType(line.getShiftType());
                     dto.setProductionStage(line.getProductionStage());
@@ -435,9 +475,15 @@ public class PayrollService {
         PayrollProfile profile = new PayrollProfile(); profile.setTeam(team); profile.setUser(user);
         profile.setHourlyRateVnd(DEFAULT_HOURLY_RATE); profile.setOvertimeMultiplier(DEFAULT_OVERTIME_MULTIPLIER); return profile;
     }
-    private boolean isTaskInPeriod(Task task, YearMonth period) {
-        LocalDateTime date = task.getDueTime() != null ? task.getDueTime() : task.getDeadline() != null ? task.getDeadline() : task.getCreatedAt();
-        return date != null && YearMonth.from(date).equals(period);
+    private AttendanceSettings defaultAttendanceSettings(Team team) {
+        AttendanceSettings settings = new AttendanceSettings();
+        settings.setTeam(team);
+        settings.setWorkStartTime(AttendanceSettings.DEFAULT_START_TIME);
+        settings.setWorkEndTime(AttendanceSettings.DEFAULT_END_TIME);
+        settings.setStandardHours(AttendanceSettings.DEFAULT_STANDARD_HOURS);
+        settings.setHourlyRateVnd(AttendanceSettings.DEFAULT_HOURLY_RATE_VND);
+        settings.setOvertimeMultiplier(AttendanceSettings.DEFAULT_OVERTIME_MULTIPLIER);
+        return settings;
     }
     private YearMonth normalizePeriod(Integer year, Integer month) {
         YearMonth now = YearMonth.now(VIETNAM_ZONE);

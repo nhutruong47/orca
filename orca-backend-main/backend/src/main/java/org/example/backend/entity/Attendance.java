@@ -1,6 +1,7 @@
 package org.example.backend.entity;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -52,6 +53,15 @@ public class Attendance {
 
     @Column(name = "break_minutes")
     private Integer breakMinutes = 30;
+
+    @Column(name = "standard_hours_snapshot", precision = 4, scale = 2)
+    private BigDecimal standardHoursSnapshot;
+
+    @Column(name = "hourly_rate_vnd_snapshot")
+    private Long hourlyRateVndSnapshot;
+
+    @Column(name = "overtime_multiplier_snapshot", precision = 4, scale = 2)
+    private BigDecimal overtimeMultiplierSnapshot;
 
     @Column(name = "actual_work_hours")
     private Double actualWorkHours;
@@ -118,6 +128,12 @@ public class Attendance {
     public void setProductionOrder(ProductionOrder productionOrder) { this.productionOrder = productionOrder; }
     public Integer getBreakMinutes() { return breakMinutes; }
     public void setBreakMinutes(Integer breakMinutes) { this.breakMinutes = breakMinutes; }
+    public BigDecimal getStandardHoursSnapshot() { return standardHoursSnapshot; }
+    public void setStandardHoursSnapshot(BigDecimal standardHoursSnapshot) { this.standardHoursSnapshot = standardHoursSnapshot; }
+    public Long getHourlyRateVndSnapshot() { return hourlyRateVndSnapshot; }
+    public void setHourlyRateVndSnapshot(Long hourlyRateVndSnapshot) { this.hourlyRateVndSnapshot = hourlyRateVndSnapshot; }
+    public BigDecimal getOvertimeMultiplierSnapshot() { return overtimeMultiplierSnapshot; }
+    public void setOvertimeMultiplierSnapshot(BigDecimal overtimeMultiplierSnapshot) { this.overtimeMultiplierSnapshot = overtimeMultiplierSnapshot; }
     public Double getActualWorkHours() { return actualWorkHours; }
     public void setActualWorkHours(Double actualWorkHours) { this.actualWorkHours = actualWorkHours; }
     public Double getRegularHours() { return regularHours; }
