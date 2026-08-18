@@ -1,12 +1,12 @@
-import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { teamService, goalService, taskService, getTrialStatus, chatService, inventoryService, notificationService } from '../services/groupService';
+import { teamService, goalService, taskService, getTrialStatus, chatService, inventoryService, notificationService, payrollService } from '../services/groupService';
 import { attendanceService } from '../services/attendanceService';
-import type { AttendanceDTO, AttendanceSettingsDTO } from '../services/attendanceService';
+import type { AttendanceSettingsDTO } from '../services/attendanceService';
 import type { AttendanceCorrectionDTO } from '../services/attendanceService';
 import { uploadFile } from '../services/api';
-import type { Team, Goal, Task, ChatMsg, SalaryReport, PlanUsage } from '../types/types';
+import type { Team, Goal, Task, ChatMsg, SalaryReport, PlanUsage, PayrollReport } from '../types/types';
 
 import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
@@ -402,6 +402,8 @@ export default function GroupDetailPage() {
         inventoryService.getByTeam(id).then(data => { setInventoryItems(data || []); }).catch(() => { });
     }, [id, team?.id, isAdmin]);
 
+
+
     // Attendance state
     const [myAttendance, setMyAttendance] = useState<any>(null);
     const [showAttendanceHistory, setShowAttendanceHistory] = useState(false);
@@ -411,8 +413,16 @@ export default function GroupDetailPage() {
     
     // Team Attendance
     const [showTeamAttendance, setShowTeamAttendance] = useState(false);
-    const [teamAttendanceData, setTeamAttendanceData] = useState<AttendanceDTO[]>([]);
-    const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [selectedAttendanceMemberId, setSelectedAttendanceMemberId] = useState<string | null>(null);
+    const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [attendanceTab, setAttendanceTab] = useState<'ATTENDANCE' | 'TASKS'>('ATTENDANCE');
+    
+    const [teamAttendanceMonthlyData, setTeamAttendanceMonthlyData] = useState<PayrollReport | null>(null);
+    const [memberTasks, setMemberTasks] = useState<Task[]>([]);
+    
     const [attendanceError, setAttendanceError] = useState('');
     const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionDTO[]>([]);
     const [editingAttendance, setEditingAttendance] = useState<{ id: string, checkInTime: string, checkOutTime: string, reason: string } | null>(null);
@@ -433,19 +443,22 @@ export default function GroupDetailPage() {
     const [savingAttendanceSettings, setSavingAttendanceSettings] = useState(false);
     const [attendanceSettingsSaved, setAttendanceSettingsSaved] = useState(false);
     const teamAttendanceModalRef = useRef<HTMLDivElement>(null);
-    const attendanceRows = (team?.members || []).map(member => ({
-        member,
-        attendance: teamAttendanceData.find(item => item.userId === member.userId),
-    }));
-    const attendanceSummary = {
-        employees: attendanceRows.length,
-        active: teamAttendanceData.filter(item => item.checkInTime && !item.checkOutTime).length,
-        completed: teamAttendanceData.filter(item => item.checkOutTime).length,
-        missing: attendanceRows.filter(row => !row.attendance).length,
-        totalHours: teamAttendanceData.reduce((sum, item) => sum + (Number(item.actualWorkHours) || 0), 0),
-        regularHours: teamAttendanceData.reduce((sum, item) => sum + (Number(item.regularHours) || 0), 0),
-        overtimeHours: teamAttendanceData.reduce((sum, item) => sum + (Number(item.overtimeHours) || 0), 0),
-    };
+
+    // Derived states for Monthly View
+    const selectedPayrollItem = useMemo(() => {
+        if (!teamAttendanceMonthlyData || !selectedAttendanceMemberId) return null;
+        return teamAttendanceMonthlyData.items.find(i => i.memberId === selectedAttendanceMemberId) || null;
+    }, [teamAttendanceMonthlyData, selectedAttendanceMemberId]);
+
+    const monthlyAttendanceSummary = useMemo(() => {
+        if (!selectedPayrollItem) return { days: 0, regularHours: 0, overtimeHours: 0, completedTasks: 0 };
+        return {
+            days: selectedPayrollItem.attendanceLines.filter(l => l.checkInTime).length,
+            regularHours: selectedPayrollItem.regularHours,
+            overtimeHours: selectedPayrollItem.overtimeHours,
+            completedTasks: selectedPayrollItem.completedTasks,
+        };
+    }, [selectedPayrollItem]);
 
     useGSAP(() => {
         if (!showAttendanceHistory || !attendanceHistoryModalRef.current) return;
@@ -539,11 +552,12 @@ export default function GroupDetailPage() {
         if (!id) return;
         try {
             setAttendanceError('');
-            const [data, settings] = await Promise.all([
-                attendanceService.getTeamDaily(id, attendanceDate),
+            const [report, settings] = await Promise.all([
+                payrollService.getReport(id, selectedAttendanceMonth),
                 attendanceService.getSettings(id),
             ]);
-            setTeamAttendanceData(data || []);
+            setTeamAttendanceMonthlyData(report);
+            
             const normalizedSettings = {
                 ...settings,
                 workStartTime: settings.workStartTime.slice(0, 5),
@@ -556,7 +570,33 @@ export default function GroupDetailPage() {
         } catch {
             setAttendanceError('Không tải được dữ liệu chấm công. Vui lòng thử lại.');
         }
-    }, [id, attendanceDate]);
+    }, [id, selectedAttendanceMonth]);
+
+    const loadMemberTasks = useCallback(async () => {
+        if (!selectedAttendanceMemberId) {
+            setMemberTasks([]);
+            return;
+        }
+        try {
+            const tasks = await taskService.getMyTasks(selectedAttendanceMemberId);
+            // Filter tasks by selected month and completed status
+            const filteredTasks = tasks.filter(t => {
+                if (t.status !== 'COMPLETED' || !t.updatedAt) return false;
+                const taskDate = new Date(t.updatedAt);
+                const [year, month] = selectedAttendanceMonth.split('-').map(Number);
+                return taskDate.getFullYear() === year && (taskDate.getMonth() + 1) === month;
+            });
+            setMemberTasks(filteredTasks);
+        } catch (err) {
+            console.error('Failed to load tasks', err);
+        }
+    }, [selectedAttendanceMemberId, selectedAttendanceMonth]);
+
+    useEffect(() => {
+        if (showTeamAttendance && attendanceTab === 'TASKS') {
+            loadMemberTasks();
+        }
+    }, [showTeamAttendance, attendanceTab, loadMemberTasks]);
 
     const saveAttendanceSettings = async () => {
         if (!id) return;
@@ -2072,8 +2112,12 @@ export default function GroupDetailPage() {
             {isAdmin && (
                 <PayrollPanel
                     teamId={id!}
-                    onEditAttendance={(_memberId, date) => {
-                        if (date) setAttendanceDate(date);
+                    onEditAttendance={(memberId, date) => {
+                        setSelectedAttendanceMemberId(memberId);
+                        if (date) {
+                            const [y, m] = date.split('-');
+                            setSelectedAttendanceMonth(`${y}-${m}`);
+                        }
                         setShowTeamAttendance(true);
                     }}
                 />
@@ -4127,92 +4171,134 @@ export default function GroupDetailPage() {
                             </p>
                         </section>
 
-                        <div className="attendance-modal__date-filter attendance-modal__animate">
+                        <div className="attendance-modal__date-filter attendance-modal__animate" style={{ display: 'flex', gap: 24 }}>
                             <div>
-                                <label htmlFor="attendance-date">Ngày cần xem</label>
-                                <input id="attendance-date" type="date" value={attendanceDate} onChange={event => setAttendanceDate(event.target.value)} />
+                                <label htmlFor="attendance-member">Nhân viên</label>
+                                <select 
+                                    id="attendance-member" 
+                                    value={selectedAttendanceMemberId || ''} 
+                                    onChange={event => setSelectedAttendanceMemberId(event.target.value)}
+                                    style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                                >
+                                    <option value="" disabled>Chọn nhân viên...</option>
+                                    {(team?.members || []).map(m => (
+                                        <option key={m.userId} value={m.userId}>{m.fullName || m.username}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <span>Hệ thống tự tính giờ thường và OT từ giờ vào/ra. Nhân viên không thể tự sửa.</span>
+                            <div>
+                                <label htmlFor="attendance-month">Tháng cần xem</label>
+                                <input 
+                                    id="attendance-month" 
+                                    type="month" 
+                                    value={selectedAttendanceMonth} 
+                                    onChange={event => setSelectedAttendanceMonth(event.target.value)} 
+                                />
+                            </div>
+                            <div style={{ alignSelf: 'flex-end', paddingBottom: 6 }}>
+                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Hệ thống tự tính giờ thường và OT từ giờ vào/ra.</span>
+                            </div>
                         </div>
 
                         <div className="attendance-modal__summary attendance-modal__animate" aria-label="Tổng quan chấm công">
                             <div className="attendance-modal__summary-card">
-                                <span>Đã chấm công</span>
-                                <strong>{teamAttendanceData.length}/{attendanceSummary.employees}</strong>
-                                <small>{attendanceSummary.missing} người chưa vào ca</small>
+                                <span>Số ngày đi làm</span>
+                                <strong>{monthlyAttendanceSummary.days}</strong>
+                                <small>ngày trong tháng</small>
+                            </div>
+                            <div className="attendance-modal__summary-card">
+                                <span>Giờ thường</span>
+                                <strong>{formatAttendanceHourValue(monthlyAttendanceSummary.regularHours)}h</strong>
+                                <small>Giờ làm việc tiêu chuẩn</small>
                             </div>
                             <div className="attendance-modal__summary-card is-active">
-                                <span>Đang làm việc</span>
-                                <strong>{attendanceSummary.active}</strong>
-                                <small>Đã vào ca, chưa tan ca</small>
+                                <span>Tăng ca</span>
+                                <strong>{monthlyAttendanceSummary.overtimeHours > 0 ? `+${formatAttendanceHourValue(monthlyAttendanceSummary.overtimeHours)}h` : '0h'}</strong>
+                                <small>Ngoài giờ hành chính</small>
                             </div>
                             <div className="attendance-modal__summary-card is-complete">
                                 <span>Ca hoàn thành</span>
-                                <strong>{attendanceSummary.completed}</strong>
-                                <small>Đã ghi nhận tan ca</small>
-                            </div>
-                            <div className="attendance-modal__summary-card is-hours">
-                                <span>Giờ ghi nhận</span>
-                                <strong>{formatAttendanceHourValue(attendanceSummary.totalHours)}h</strong>
-                                <small>{formatAttendanceHourValue(attendanceSummary.regularHours)}h thường · {formatAttendanceHourValue(attendanceSummary.overtimeHours)}h OT</small>
+                                <strong>{monthlyAttendanceSummary.completedTasks}</strong>
+                                <small>công việc đã hoàn thành</small>
                             </div>
                         </div>
 
-                        <div className="attendance-modal__body attendance-modal__animate">
-                            {attendanceError && <div className="attendance-modal__error" role="alert">{attendanceError}</div>}
-                            {attendanceRows.length === 0 ? (
-                                <div className="attendance-modal__empty">
-                                    <div className="attendance-modal__empty-icon" aria-hidden="true">
-                                        <ion-icon name="calendar-clear-outline"></ion-icon>
-                                    </div>
-                                     <h3>Xưởng chưa có thành viên</h3>
-                                     <p>Mời nhân viên vào xưởng để bắt đầu quản lý chấm công.</p>
-                                    <button type="button" onClick={() => setShowTeamAttendance(false)}>Đóng</button>
+                        <div className="attendance-modal__animate" style={{ margin: '0 24px 16px', display: 'flex', gap: 16, borderBottom: '1px solid var(--border)' }}>
+                            <button 
+                                onClick={() => setAttendanceTab('ATTENDANCE')} 
+                                style={{ padding: '12px 16px', background: 'none', border: 'none', borderBottom: attendanceTab === 'ATTENDANCE' ? '2px solid var(--primary)' : '2px solid transparent', color: attendanceTab === 'ATTENDANCE' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                                Lịch sử chấm công
+                            </button>
+                            <button 
+                                onClick={() => setAttendanceTab('TASKS')} 
+                                style={{ padding: '12px 16px', background: 'none', border: 'none', borderBottom: attendanceTab === 'TASKS' ? '2px solid var(--primary)' : '2px solid transparent', color: attendanceTab === 'TASKS' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                                Lịch sử làm việc
+                            </button>
+                        </div>
+
+                        <div className="attendance-modal__body attendance-modal__animate" style={{ marginTop: 0 }}>
+                            {attendanceError && <div className="attendance-modal__error" role="alert" style={{ margin: '0 24px 16px' }}>{attendanceError}</div>}
+                            
+                            {attendanceTab === 'TASKS' ? (
+                                <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {!selectedAttendanceMemberId ? (
+                                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Vui lòng chọn nhân viên để xem lịch sử làm việc.</div>
+                                    ) : memberTasks.length === 0 ? (
+                                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Không có công việc nào hoàn thành trong tháng này.</div>
+                                    ) : (
+                                        memberTasks.map(t => (
+                                            <div key={t.id} style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                    <strong style={{ fontSize: 15 }}>{t.title}</strong>
+                                                    <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 600 }}>Hoàn thành</span>
+                                                </div>
+                                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 16 }}>
+                                                    <span>Giai đoạn: {t.productionStage || '—'}</span>
+                                                    <span>Hoàn thành lúc: {t.updatedAt ? new Date(t.updatedAt).toLocaleString('vi-VN') : '—'}</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             ) : (
                                 <div className="attendance-modal__table-shell">
                                     <table className="attendance-modal__table">
                                         <thead>
                                             <tr>
-                                                <th>Nhân viên</th>
-                                                 <th>Vào ca</th>
-                                                 <th>Tan ca</th>
-                                                 <th>Tổng giờ</th>
-                                                 <th>Giờ thường</th>
-                                                 <th>Tăng ca</th>
-                                                 <th>Thao tác</th>
+                                                <th>Ngày</th>
+                                                <th>Giờ vào</th>
+                                                <th>Giờ ra</th>
+                                                <th>Giờ thường</th>
+                                                <th>Tăng ca</th>
+                                                <th>Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                        {attendanceRows.map(({ member, attendance: item }) => {
-                                            const isEditing = Boolean(item && editingAttendance?.id === item.id);
-                                            const employeeName = member.fullName || member.username;
-                                            return <Fragment key={member.userId}>
+                                        {!selectedPayrollItem ? (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                                                    {!selectedAttendanceMemberId ? 'Vui lòng chọn nhân viên để xem lịch sử chấm công.' : 'Không có dữ liệu chấm công cho tháng này.'}
+                                                </td>
+                                            </tr>
+                                        ) : selectedPayrollItem.attendanceLines.map(item => {
+                                            const isEditing = Boolean(editingAttendance?.id === item.id);
+                                            return <Fragment key={item.date}>
                                                 <tr>
                                                     <td>
-                                                        <div className="attendance-modal__employee">
-                                                            <span style={{ backgroundColor: avatarColor(employeeName) }}>{getInitials(employeeName)}</span>
-                                                            <div>
-                                                                <strong>{employeeName}</strong>
-                                                                 <small>{member.jobLabels?.join(', ') || 'Chưa phân công vị trí'}</small>
-                                                            </div>
-                                                        </div>
+                                                        <strong>{new Date(item.date).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })}</strong>
                                                     </td>
-                                                     <td>{item?.checkInTime ? new Date(item.checkInTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</td>
-                                                     <td>{item?.checkOutTime ? new Date(item.checkOutTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</td>
+                                                     <td>{item.checkInTime ? new Date(item.checkInTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</td>
+                                                     <td>{item.checkOutTime ? new Date(item.checkOutTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</td>
                                                      <td className="attendance-modal__hours">
-                                                         {item?.workedHours !== undefined || item?.actualWorkHours !== undefined
-                                                             ? `${formatAttendanceHourValue(item.workedHours ?? item.actualWorkHours)}h` : '--'}
-                                                     </td>
-                                                     <td className="attendance-modal__hours">
-                                                        {item?.regularHours !== undefined ? `${formatAttendanceHourValue(item.regularHours)}h` : '--'}
+                                                        {item.regularHours !== undefined ? `${formatAttendanceHourValue(item.regularHours)}h` : '--'}
                                                     </td>
                                                     <td className="attendance-modal__overtime">
-                                                        {(Number(item?.overtimeHours) || 0) > 0 ? `+${formatAttendanceHourValue(item?.overtimeHours)}h` : '--'}
+                                                        {(Number(item.overtimeHours) || 0) > 0 ? `+${formatAttendanceHourValue(item.overtimeHours)}h` : '--'}
                                                     </td>
                                                     <td className="attendance-modal__actions-cell">
-                                                        {item && <button onClick={() => {
-                                                                 // Convert to format required by datetime-local: YYYY-MM-DDThh:mm
+                                                        {item.id && <button onClick={() => {
                                                                  const toLocalString = (dateStr?: string | null) => {
                                                                      if (!dateStr) return '';
                                                                      const d = new Date(dateStr);
@@ -4235,7 +4321,7 @@ export default function GroupDetailPage() {
                                                              </button>}
                                                     </td>
                                                 </tr>
-                                                {isEditing && editingAttendance && <tr className="attendance-modal__correction-row"><td colSpan={7}>
+                                                {isEditing && editingAttendance && <tr className="attendance-modal__correction-row"><td colSpan={6}>
                                                     <div className="attendance-modal__correction">
                                                         <div><label>Giờ vào</label><input className="attendance-modal__time-input" type="datetime-local" value={editingAttendance.checkInTime} onChange={event => setEditingAttendance({ ...editingAttendance, checkInTime: event.target.value })} /></div>
                                                         <div><label>Giờ ra</label><input className="attendance-modal__time-input" type="datetime-local" value={editingAttendance.checkOutTime} onChange={event => setEditingAttendance({ ...editingAttendance, checkOutTime: event.target.value })} /></div>

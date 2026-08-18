@@ -114,6 +114,8 @@ export const payrollService = {
         api.get(`/api/payroll/teams/${teamId}/export-excel`, {
             params: toSalaryMonthParams(salaryMonth), responseType: 'blob'
         }),
+    adjust: (runId: string, data: { userId: string, allowanceVnd: number, note: string }) =>
+        api.post<PayrollReport>(`/api/payroll/runs/${runId}/adjust`, data).then(r => r.data),
 };
 
 export const productionService = {

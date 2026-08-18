@@ -14,31 +14,31 @@ class AttendanceCalculatorTest {
                 LocalDateTime.of(2026, 8, 14, 9, 0),
                 LocalDateTime.of(2026, 8, 14, 17, 30),
                 LocalTime.of(17, 30), new BigDecimal("7.50"));
-        assertEquals(new BigDecimal("7.50"), result.totalHours());
+        assertEquals(new BigDecimal("8.50"), result.totalHours());
         assertEquals(new BigDecimal("7.50"), result.regularHours());
-        assertEquals(new BigDecimal("0.00"), result.overtimeHours());
+        assertEquals(new BigDecimal("1.00"), result.overtimeHours());
     }
 
     @Test
-    void overtimeStartsAfterConfiguredEndTime() {
+    void overtimeIsStrictlyWorkedHoursMinusStandardHours() {
         var result = AttendanceCalculator.calculate(
                 LocalDateTime.of(2026, 8, 14, 9, 0),
                 LocalDateTime.of(2026, 8, 14, 19, 30),
                 LocalTime.of(17, 30), new BigDecimal("7.50"));
-        assertEquals(new BigDecimal("9.50"), result.totalHours());
+        assertEquals(new BigDecimal("10.50"), result.totalHours());
         assertEquals(new BigDecimal("7.50"), result.regularHours());
-        assertEquals(new BigDecimal("2.00"), result.overtimeHours());
+        assertEquals(new BigDecimal("3.00"), result.overtimeHours());
     }
 
     @Test
-    void oneHourAfterShiftEndIsOneHourOvertime() {
+    void oneHourAfterShiftEndIsTwoHoursOvertimeIfWorked95Hours() {
         var result = AttendanceCalculator.calculate(
                 LocalDateTime.of(2026, 8, 14, 9, 0),
                 LocalDateTime.of(2026, 8, 14, 18, 30),
                 LocalTime.of(17, 30), new BigDecimal("7.50"));
-        assertEquals(new BigDecimal("8.50"), result.totalHours());
+        assertEquals(new BigDecimal("9.50"), result.totalHours());
         assertEquals(new BigDecimal("7.50"), result.regularHours());
-        assertEquals(new BigDecimal("1.00"), result.overtimeHours());
+        assertEquals(new BigDecimal("2.00"), result.overtimeHours());
     }
 
     @Test

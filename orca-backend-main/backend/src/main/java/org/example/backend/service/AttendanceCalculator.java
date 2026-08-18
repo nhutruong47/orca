@@ -22,20 +22,13 @@ public final class AttendanceCalculator {
             throw new IllegalArgumentException("Giờ ra phải sau giờ vào");
         }
         long elapsedMinutes = Duration.between(checkIn, checkOut).toMinutes();
-        LocalDateTime overtimeBoundary = checkIn.toLocalDate().atTime(scheduledEnd);
-        if (!overtimeBoundary.isAfter(checkIn) && checkOut.toLocalDate().isAfter(checkIn.toLocalDate())) {
-            overtimeBoundary = overtimeBoundary.plusDays(1);
-        }
+        
+        long standardMinutes = standardHours.multiply(BigDecimal.valueOf(60)).longValue();
+        
+        long regularMinutes = Math.min(elapsedMinutes, standardMinutes);
+        long overtimeMinutes = Math.max(elapsedMinutes - standardMinutes, 0);
 
-        long overtimeMinutes = checkOut.isAfter(overtimeBoundary)
-                ? Duration.between(overtimeBoundary, checkOut).toMinutes()
-                : 0;
-        overtimeMinutes = Math.min(Math.max(overtimeMinutes, 0), elapsedMinutes);
-        long regularMinutes = Math.max(0, elapsedMinutes - overtimeMinutes);
-
-        BigDecimal standardMinutes = standardHours.multiply(BigDecimal.valueOf(60));
         BigDecimal regular = BigDecimal.valueOf(regularMinutes)
-                .min(standardMinutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
         BigDecimal overtime = BigDecimal.valueOf(overtimeMinutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);

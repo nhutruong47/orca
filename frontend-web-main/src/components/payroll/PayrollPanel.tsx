@@ -105,6 +105,21 @@ export default function PayrollPanel({ teamId, onEditAttendance }: PayrollPanelP
         }
     };
 
+    const handleSaveBonus = useCallback(async (memberId: string, amount: number, reason: string) => {
+        if (!report?.runId) return;
+        try {
+            await payrollService.adjust(report.runId, {
+                userId: memberId,
+                allowanceVnd: amount,
+                note: reason
+            });
+            void load();
+        } catch (e) {
+            console.error(e);
+            alert("Lỗi khi lưu thưởng/phụ cấp");
+        }
+    }, [report?.runId, load]);
+
     const summary = report?.summary;
 
     return (
@@ -165,7 +180,7 @@ export default function PayrollPanel({ teamId, onEditAttendance }: PayrollPanelP
 
                             <div className="payroll__table-wrap">
                                 <table className="payroll__table">
-                                    <thead><tr><th>Nhân viên</th><th>Chấm công</th><th>Lương thường</th><th>Tăng ca</th><th>Thực nhận</th></tr></thead>
+                                    <thead><tr><th>Nhân viên</th><th>Chấm công</th><th>Lương thường</th><th>Tăng ca</th><th>Thực nhận</th><th>Thao tác</th></tr></thead>
                                     <tbody>
                                         {report.items.map(item => (
                                             <EmployeeRows
@@ -174,10 +189,11 @@ export default function PayrollPanel({ teamId, onEditAttendance }: PayrollPanelP
                                                 expanded={expandedId === item.memberId}
                                                 onToggle={() => setExpandedId(current => current === item.memberId ? null : item.memberId)}
                                                 onEditAttendance={onEditAttendance}
+                                                onSaveBonus={handleSaveBonus}
                                             />
                                         ))}
                                     </tbody>
-                                    <tfoot><tr><td>Tổng cộng</td><td>{summary.attendanceDays} lượt</td><td>{formatMoney(report.items.reduce((sum, item) => sum + item.regularPayVnd, 0))}</td><td>{formatMoney(report.items.reduce((sum, item) => sum + item.overtimePayVnd, 0))}</td><td>{formatMoney(summary.netPayVnd)}</td></tr></tfoot>
+                                    <tfoot><tr><td>Tổng cộng</td><td>{summary.attendanceDays} lượt</td><td>{formatMoney(report.items.reduce((sum, item) => sum + item.regularPayVnd, 0))}</td><td>{formatMoney(report.items.reduce((sum, item) => sum + item.overtimePayVnd, 0))}</td><td>{formatMoney(summary.netPayVnd)}</td><td></td></tr></tfoot>
                                 </table>
                             </div>
 
@@ -189,6 +205,7 @@ export default function PayrollPanel({ teamId, onEditAttendance }: PayrollPanelP
                                         expanded={expandedId === item.memberId}
                                         onToggle={() => setExpandedId(current => current === item.memberId ? null : item.memberId)}
                                         onEditAttendance={onEditAttendance}
+                                        onSaveBonus={handleSaveBonus}
                                     />
                                 ))}
                             </div>
@@ -200,44 +217,49 @@ export default function PayrollPanel({ teamId, onEditAttendance }: PayrollPanelP
     );
 }
 
-function EmployeeRows({ item, expanded, onToggle, onEditAttendance }: {
+function EmployeeRows({ item, expanded, onToggle, onEditAttendance, onSaveBonus }: {
     item: PayrollItem;
     expanded: boolean;
     onToggle: () => void;
     onEditAttendance?: (memberId: string, date?: string) => void;
+    onSaveBonus?: (memberId: string, amount: number, reason: string) => void;
 }) {
-    const worked = Number(item.regularHours) + Number(item.overtimeHours);
     return (
         <>
             <tr className={expanded ? 'is-expanded' : ''}>
                 <td><EmployeeIdentity item={item} expanded={expanded} onToggle={onToggle} /></td>
-                <td><strong>{item.attendanceDays} ngày · {hours.format(worked)} giờ</strong><small>{item.overtimeHours > 0 ? `+${hours.format(item.overtimeHours)} giờ tăng ca` : 'Không tăng ca'}</small></td>
+                <td><strong>{item.attendanceDays} ngày · {hours.format(item.regularHours)} giờ</strong><small>{item.overtimeHours > 0 ? `+${hours.format(item.overtimeHours)} giờ tăng ca` : 'Không tăng ca'}</small></td>
                 <td><strong>{formatMoney(item.regularPayVnd)}</strong><small>{hours.format(item.regularHours)}h × {money.format(item.hourlyRateVnd)}đ</small></td>
                 <td><strong>{formatMoney(item.overtimePayVnd)}</strong><small>{hours.format(item.overtimeHours)}h × {money.format(item.hourlyRateVnd)}đ × {hours.format(item.overtimeMultiplier)}</small></td>
                 <td><strong className="payroll__net-pay">{formatMoney(item.netPayVnd)}</strong><small>Đã tính từ dữ liệu hợp lệ</small></td>
+                <td>
+                    <button type="button" onClick={onToggle} style={{ padding: '6px 12px', background: 'var(--primary, #b96f13)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                        {expanded ? 'Đóng chi tiết' : 'Mở chi tiết'}
+                    </button>
+                </td>
             </tr>
-            {expanded && <tr className="payroll__detail-row"><td colSpan={5}><EmployeeDetail item={item} onEditAttendance={onEditAttendance} /></td></tr>}
+            {expanded && <tr className="payroll__detail-row"><td colSpan={6}><EmployeeDetail item={item} onEditAttendance={onEditAttendance} onSaveBonus={onSaveBonus} /></td></tr>}
         </>
     );
 }
 
-function EmployeeCard({ item, expanded, onToggle, onEditAttendance }: {
+function EmployeeCard({ item, expanded, onToggle, onEditAttendance, onSaveBonus }: {
     item: PayrollItem;
     expanded: boolean;
     onToggle: () => void;
     onEditAttendance?: (memberId: string, date?: string) => void;
+    onSaveBonus?: (memberId: string, amount: number, reason: string) => void;
 }) {
-    const worked = Number(item.regularHours) + Number(item.overtimeHours);
     return (
         <article className={`payroll__mobile-card ${expanded ? 'is-expanded' : ''}`}>
             <EmployeeIdentity item={item} expanded={expanded} onToggle={onToggle} />
-            <div className="payroll__mobile-attendance"><strong>{item.attendanceDays} ngày · {hours.format(worked)} giờ</strong><span>{item.overtimeHours > 0 ? `+${hours.format(item.overtimeHours)} giờ tăng ca` : 'Không tăng ca'}</span></div>
+            <div className="payroll__mobile-attendance"><strong>{item.attendanceDays} ngày · {hours.format(item.regularHours)} giờ</strong><span>{item.overtimeHours > 0 ? `+${hours.format(item.overtimeHours)} giờ tăng ca` : 'Không tăng ca'}</span></div>
             <dl>
                 <div><dt>Lương thường</dt><dd>{formatMoney(item.regularPayVnd)}</dd></div>
                 <div><dt>Tăng ca</dt><dd>{formatMoney(item.overtimePayVnd)}</dd></div>
                 <div className="is-total"><dt>Thực nhận</dt><dd>{formatMoney(item.netPayVnd)}</dd></div>
             </dl>
-            {expanded && <EmployeeDetail item={item} onEditAttendance={onEditAttendance} />}
+            {expanded && <EmployeeDetail item={item} onEditAttendance={onEditAttendance} onSaveBonus={onSaveBonus} />}
         </article>
     );
 }
@@ -252,14 +274,119 @@ function EmployeeIdentity({ item, expanded, onToggle }: { item: PayrollItem; exp
     );
 }
 
-function EmployeeDetail({ item, onEditAttendance }: { item: PayrollItem; onEditAttendance?: (memberId: string, date?: string) => void }) {
+function EmployeeDetail({ item, onEditAttendance, onSaveBonus }: { item: PayrollItem; onEditAttendance?: (memberId: string, date?: string) => void; onSaveBonus?: (memberId: string, amount: number, reason: string) => void; }) {
+    const [isAddingBonus, setIsAddingBonus] = useState(false);
+    const [bonusAmount, setBonusAmount] = useState('');
+    const [bonusReason, setBonusReason] = useState('');
+    const [bonusError, setBonusError] = useState('');
+
+    const handleSaveBonus = () => {
+        const amount = Number(bonusAmount.replace(/\D/g, ''));
+        if (amount <= 0) {
+            setBonusError('Vui lòng nhập số tiền lớn hơn 0.');
+            return;
+        }
+        onSaveBonus?.(item.memberId, amount, bonusReason);
+        setIsAddingBonus(false);
+        setBonusAmount('');
+        setBonusReason('');
+        setBonusError('');
+    };
+
     return (
         <div className="payroll__detail">
+            {isAddingBonus && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+                    <div className="payroll__bonus-form" style={{ width: '100%', maxWidth: '480px', margin: 0, position: 'relative', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+                        <div className="payroll__bonus-header" style={{ paddingRight: '24px' }}>
+                            <h5>Thêm thưởng / phụ cấp</h5>
+                            <p>Nhập khoản tiền cộng thêm cho nhân viên trong kỳ này.</p>
+                            <button type="button" onClick={() => { setIsAddingBonus(false); setBonusError(''); }} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', lineHeight: 1 }}>&times;</button>
+                        </div>
+                        <div className="payroll__bonus-body">
+                            <label className="payroll__bonus-field">
+                                <span className="payroll__bonus-label">Số tiền *</span>
+                                <span className="payroll__bonus-helper">Khoản tiền cộng thêm cho nhân viên</span>
+                                <div className="payroll__bonus-input-wrap">
+                                    <input 
+                                        type="text" 
+                                        inputMode="numeric"
+                                        placeholder="Nhập số tiền" 
+                                        value={bonusAmount}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            setBonusAmount(val ? Number(val).toLocaleString('vi-VN') : '');
+                                            setBonusError('');
+                                        }}
+                                        autoFocus
+                                    />
+                                    <span className="payroll__bonus-suffix">đ</span>
+                                </div>
+                                {bonusError && <div className="payroll__bonus-error">{bonusError}</div>}
+                            </label>
+                            
+                            <label className="payroll__bonus-field">
+                                <span className="payroll__bonus-label">Lý do</span>
+                                <span className="payroll__bonus-helper">Ghi chú để quản lý biết khoản tiền này là gì</span>
+                                <textarea 
+                                    placeholder="Ví dụ: Thưởng làm việc tốt, hỗ trợ xăng xe..."
+                                    value={bonusReason}
+                                    onChange={(e) => setBonusReason(e.target.value)}
+                                    rows={2}
+                                />
+                            </label>
+                        </div>
+                        <div className="payroll__bonus-footer">
+                            <button type="button" className="payroll__bonus-cancel" onClick={() => { setIsAddingBonus(false); setBonusError(''); }}>Hủy</button>
+                            <button type="button" className="payroll__bonus-save" onClick={handleSaveBonus}>Lưu thưởng</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <section className="payroll__formula" aria-label={`Cách tính lương của ${item.memberName}`}>
                 <h4>Cách tính thực nhận</h4>
                 <div><span>Lương thường</span><code>{hours.format(item.regularHours)}h × {money.format(item.hourlyRateVnd)}đ</code><strong>{formatMoney(item.regularPayVnd)}</strong></div>
-                <div><span>Lương tăng ca</span><code>{hours.format(item.overtimeHours)}h × {money.format(item.hourlyRateVnd)}đ × {hours.format(item.overtimeMultiplier)}</code><strong>{formatMoney(item.overtimePayVnd)}</strong></div>
-                <div className="is-total"><span>Thực nhận</span><code>Lương thường + tăng ca</code><strong>{formatMoney(item.netPayVnd)}</strong></div>
+                {item.overtimeHours > 0 && <div><span>Lương tăng ca</span><code>{hours.format(item.overtimeHours)}h × {money.format(item.hourlyRateVnd)}đ × {hours.format(item.overtimeMultiplier)}</code><strong>{formatMoney(item.overtimePayVnd)}</strong></div>}
+                
+                {item.allowanceVnd > 0 && (
+                    <div>
+                        <span>Thưởng / phụ cấp</span>
+                        <code style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                            {item.note || 'Không có lý do'}
+                            <div style={{display: 'flex', gap: '8px'}}>
+                                <button type="button" onClick={() => {
+                                    setBonusAmount(item.allowanceVnd ? item.allowanceVnd.toLocaleString('vi-VN') : '');
+                                    setBonusReason(item.note || '');
+                                    setIsAddingBonus(true);
+                                }} style={{color: '#b96f13', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline'}}>Sửa thưởng</button>
+                                <button type="button" onClick={() => onSaveBonus?.(item.memberId, 0, '')} style={{color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline'}}>Xóa</button>
+                            </div>
+                        </code>
+                        <strong style={{color: '#10b981'}}>+ {formatMoney(item.allowanceVnd)}</strong>
+                    </div>
+                )}
+                
+                <div className="is-total">
+                    <span>Thực nhận</span>
+                    <strong>{formatMoney(item.netPayVnd)}</strong>
+                </div>
+
+                {!item.allowanceVnd && (
+                    <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                        <button 
+                            type="button" 
+                            onClick={() => {
+                                setBonusAmount('');
+                                setBonusReason('');
+                                setIsAddingBonus(true);
+                            }}
+                            style={{ padding: '8px 24px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                        >
+                            + Thêm thưởng / phụ cấp
+                        </button>
+                    </div>
+                )}
             </section>
 
             <section className="payroll__attendance-detail">

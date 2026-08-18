@@ -954,9 +954,9 @@ export default function AdminPage() {
                   {costStats && (
                     <section className="admin-kpi-grid">
                       <KpiCard item={{ label: 'Tổng chi hôm nay', value: money(Number(costStats.totalToday ?? 0)), detail: 'Phát sinh trong ngày', icon: Wallet, tone: 'blue' }} />
-                      <KpiCard item={{ label: 'Chi phí tháng này', value: money(currentMonthCost), detail: `Hạ tầng ORCA · ${currentPeriodLabel}`, icon: Receipt, tone: 'green' }} />
-                      <KpiCard item={{ label: 'Hạ tầng cốt lõi', value: money(coreInfrastructureCost), detail: 'Máy chủ, dữ liệu và bảo mật', icon: ServerCrash, tone: 'amber' }} />
-                      <KpiCard item={{ label: 'Dịch vụ nền tảng', value: money(platformServiceCost), detail: 'AI, email và giám sát', icon: Activity, tone: 'violet' }} />
+                      <KpiCard item={{ label: 'Chi phí tháng này', value: money(currentMonthCost), detail: `Hạ tầng ORCA · tháng 08, 2026`, icon: Banknote, tone: 'green' }} />
+                      <KpiCard item={{ label: 'Hạ tầng cốt lõi', value: money(coreInfrastructureCost), detail: 'Máy chủ, dữ liệu và bảo mật', icon: Server, tone: 'amber' }} />
+                      <KpiCard item={{ label: 'Dịch vụ nền tảng', value: money(platformServiceCost), detail: 'AI, email và giám sát', icon: Activity, tone: 'blue' }} />
                     </section>
                   )}
 

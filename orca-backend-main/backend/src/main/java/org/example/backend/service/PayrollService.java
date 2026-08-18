@@ -284,7 +284,14 @@ public class PayrollService {
         for (TeamMember member : members) {
             UUID userId = member.getUser().getId(); activeUsers.add(userId);
             PayrollItem item = existing.getOrDefault(userId, new PayrollItem());
-            if (item.getId() == null) { item.setPayrollRun(run); item.setUser(member.getUser()); }
+            if (item.getId() == null) { 
+                item.setPayrollRun(run); 
+                item.setUser(member.getUser()); 
+                item.setAllowanceVnd(0L);
+                item.setDeductionVnd(0L);
+                item.setAdvanceVnd(0L);
+                item.setNote(null);
+            }
             item.setMemberNameSnapshot(displayName(member.getUser()));
             List<Attendance> records = attendanceByUser.getOrDefault(userId, List.of());
             List<Attendance> payable = records.stream().filter(this::isPayableAttendance).toList();
@@ -296,10 +303,6 @@ public class PayrollService {
                     || a.getAttendanceStatus() == Attendance.AttendanceStatus.MISSING_CHECKOUT).count());
             item.setTotalTasks(0);
             item.setCompletedTasks(0);
-            item.setAllowanceVnd(0L);
-            item.setDeductionVnd(0L);
-            item.setAdvanceVnd(0L);
-            item.setNote(null);
             applyPayFromAttendance(item, payable, settings);
             item = itemRepository.save(item);
             syncAttendanceLines(item, records);
@@ -324,7 +327,11 @@ public class PayrollService {
         long regular = PayrollCalculator.multiply(item.getRegularHours(), item.getHourlyRateVnd(), BigDecimal.ONE);
         long overtime = PayrollCalculator.multiply(item.getOvertimeHours(), item.getHourlyRateVnd(), item.getOvertimeMultiplier());
         item.setRegularPayVnd(regular); item.setOvertimePayVnd(overtime);
-        item.setNetPayVnd(Math.addExact(regular, overtime));
+        long net = Math.addExact(regular, overtime);
+        net = Math.addExact(net, safe(item.getAllowanceVnd()));
+        net = Math.subtractExact(net, safe(item.getDeductionVnd()));
+        net = Math.subtractExact(net, safe(item.getAdvanceVnd()));
+        item.setNetPayVnd(net);
     }
 
     private void applyPayFromAttendance(PayrollItem item, List<Attendance> payable, AttendanceSettings settings) {
@@ -352,7 +359,11 @@ public class PayrollService {
         }
         item.setRegularPayVnd(regularPay);
         item.setOvertimePayVnd(overtimePay);
-        item.setNetPayVnd(Math.addExact(regularPay, overtimePay));
+        long net = Math.addExact(regularPay, overtimePay);
+        net = Math.addExact(net, safe(item.getAllowanceVnd()));
+        net = Math.subtractExact(net, safe(item.getDeductionVnd()));
+        net = Math.subtractExact(net, safe(item.getAdvanceVnd()));
+        item.setNetPayVnd(net);
     }
 
     private void recalculateRun(PayrollRun run) {
