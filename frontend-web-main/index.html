@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="vi">
 
 <head>
@@ -35,7 +35,7 @@
       } catch (e) { /* ignore */ }
     })();
   </script>
-</head>
+<script>window.addEventListener('error', function(e) { fetch('http://localhost:9999', { method: 'POST', body: JSON.stringify({message: e.message, filename: e.filename, lineno: e.lineno, colno: e.colno, stack: e.error ? e.error.stack : null}) }) }); window.addEventListener('unhandledrejection', function(e) { fetch('http://localhost:9999', { method: 'POST', body: JSON.stringify({message: e.reason ? e.reason.message : 'unhandled rejection', stack: e.reason ? e.reason.stack : null}) }) });</script></head>
 
 <body>
   <div id="root"></div>
@@ -43,3 +43,4 @@
 </body>
 
 </html>
+

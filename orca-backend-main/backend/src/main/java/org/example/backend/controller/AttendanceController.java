@@ -18,7 +18,7 @@ import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/attendance")
-@CrossOrigin("*")
+
 public class AttendanceController {
 
     private final AttendanceService attendanceService;

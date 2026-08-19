@@ -2158,7 +2158,7 @@ export default function MarketplacePage() {
 
             {showPublishModal && (
                 <div className="mp-publish-sheet-overlay" onClick={() => setShowPublishModal(false)}>
-                    <div className="mp-publish-sheet" onClick={event => event.stopPropagation()}>
+                    <div className="mp-publish-sheet" data-theme="light" onClick={event => event.stopPropagation()}>
                         <div className="mp-publish-header">
                             <button type="button" className="mp-publish-back" onClick={() => setShowPublishModal(false)} aria-label="Quay lại">
                                 <span className="material-symbols-outlined">arrow_back</span>

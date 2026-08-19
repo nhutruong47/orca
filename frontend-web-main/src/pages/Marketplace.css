@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&family=Montserrat:wght@400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&family=Montserrat:wght@400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@500&display=swap');
 
 /* === Marketplace Professional === */
 
@@ -3476,11 +3476,9 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 72px),
-        #111111;
-    color: #f4f1ec;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    background: #FFFDF7;
+    color: #24160A;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.15);
 }
 
 .mp-publish-header {
@@ -3493,13 +3491,13 @@
     align-items: center;
     gap: 14px;
     padding: 0 22px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: linear-gradient(180deg, #3f3c39 0%, #1b1b1b 100%);
+    border-bottom: 1px solid #EAD7B6;
+    background: #FFFDF8;
 }
 
 .mp-publish-header h2 {
     margin: 0;
-    color: #e7b37f;
+    color: #D4A574;
     font-family: 'Montserrat', system-ui, sans-serif;
     font-size: 18px;
     font-weight: 800;
@@ -3514,19 +3512,19 @@
     border: 0;
     border-radius: 50%;
     background: transparent;
-    color: #e7b37f;
+    color: #D4A574;
     cursor: pointer;
 }
 
 .mp-publish-back:hover {
-    background: rgba(231, 179, 127, 0.12);
+    background: #FFF7E6;
 }
 
 .mp-publish-form {
     flex: 1;
     overflow-y: auto;
     padding: 22px 22px 22px;
-    scrollbar-color: #e7b37f #151515;
+    scrollbar-color: #D4A574 transparent;
 }
 
 .mp-publish-sheet .mp-form-group {
@@ -3535,7 +3533,7 @@
 
 .mp-publish-sheet .mp-form-group label {
     margin-bottom: 8px;
-    color: #d7d0c9;
+    color: #684F34;
     font-family: 'Montserrat', system-ui, sans-serif;
     font-size: 12px;
     font-weight: 750;
@@ -3547,17 +3545,16 @@
 .mp-publish-sheet .mp-form-group select,
 .mp-publish-sheet .mp-form-group textarea {
     min-height: 48px;
-    border: 1px solid #2d2d2d;
+    border: 1px solid #EAD7B6;
     border-radius: 4px;
-    background: #1b1b1b;
-    color: #f1eee8;
+    background: #FFFAF0;
+    color: #24160A;
     padding: 12px;
     font-size: 14px;
     box-shadow: none;
 }
 
 .mp-publish-sheet .mp-form-group select {
-    color-scheme: dark;
 }
 
 .mp-publish-sheet .mp-form-group textarea {
@@ -3568,14 +3565,14 @@
 
 .mp-publish-sheet .mp-form-group input::placeholder,
 .mp-publish-sheet .mp-form-group textarea::placeholder {
-    color: #707780;
+    color: #9A7A55;
 }
 
 .mp-publish-sheet .mp-form-group input:focus,
 .mp-publish-sheet .mp-form-group select:focus,
 .mp-publish-sheet .mp-form-group textarea:focus {
-    border-color: #e7b37f;
-    box-shadow: 0 0 0 3px rgba(231, 179, 127, 0.12);
+    border-color: #D4A574;
+    box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.16);
 }
 
 .mp-publish-chip-grid {
@@ -3586,22 +3583,22 @@
 
 .mp-publish-chip-grid button {
     min-height: 34px;
-    border: 1px solid #3d3d3d;
+    border: 1px solid #EAD7B6;
     border-radius: 999px;
     padding: 8px 15px;
-    background: linear-gradient(180deg, #343434, #292929);
-    color: #f3eee8;
+    background: #FFFAF0;
+    color: #24160A;
     font-family: 'Montserrat', system-ui, sans-serif;
     font-size: 11px;
     font-weight: 800;
     cursor: pointer;
-    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mp-publish-chip-grid button.selected {
-    border-color: #e7b37f;
-    background: rgba(231, 179, 127, 0.18);
-    color: #ffd9b6;
+    border-color: #D4A574;
+    background: rgba(212, 165, 116, 0.16);
+    color: #D4A574;
 }
 
 .mp-publish-section {
@@ -3612,7 +3609,7 @@
     position: relative;
     margin: 0;
     padding-left: 12px;
-    color: #ece8e1;
+    color: #24160A;
     font-family: 'Montserrat', system-ui, sans-serif;
     font-size: 20px;
     font-weight: 850;
@@ -3627,7 +3624,7 @@
     bottom: 2px;
     width: 3px;
     border-radius: 999px;
-    background: #e7a766;
+    background: #D4A574;
 }
 
 .mp-publish-capacity-row {
@@ -3645,10 +3642,10 @@
     display: grid;
     place-items: center;
     gap: 6px;
-    border: 1px dashed #3b3b3b;
+    border: 1px dashed #D8BB86;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.025);
-    color: #d7d0c9;
+    background: #FFFAF0;
+    color: #684F34;
     cursor: pointer;
 }
 
@@ -3668,18 +3665,18 @@
 }
 
 .mp-publish-upload .material-symbols-outlined {
-    color: #e7a766;
+    color: #D4A574;
     font-size: 34px;
 }
 
 .mp-publish-upload strong {
-    color: #f4f1ec;
+    color: #24160A;
     font-family: 'Montserrat', system-ui, sans-serif;
     font-size: 13px;
 }
 
 .mp-publish-upload small {
-    color: #8c8c8c;
+    color: #9A7A55;
     font-size: 12px;
 }
 
@@ -3695,7 +3692,7 @@
 }
 
 .mp-publish-file .material-symbols-outlined {
-    color: #e7a766;
+    color: #D4A574;
     font-size: 20px;
 }
 
@@ -3709,25 +3706,25 @@
 }
 
 .mp-publish-sheet .mp-factory-image-preview img {
-    border-color: #333;
+    border-color: #D8BB86;
     border-radius: 6px;
 }
 
 .mp-publish-sheet .mp-factory-image-preview button {
-    border-color: #3d3d3d;
-    color: #e8d8c8;
+    border-color: #D8BB86;
+    color: #684F34;
 }
 
 .mp-publish-sheet .mp-verification-form {
     margin-top: 24px;
-    border-color: rgba(231, 179, 127, 0.18);
+    border-color: rgba(212, 165, 116, 0.16);
     border-radius: 6px;
     padding: 16px;
-    background: #151515;
+    background: #FFFDF8;
 }
 
 .mp-publish-sheet .mp-verification-form h3 {
-    color: #f4f1ec;
+    color: #24160A;
     font-family: 'Montserrat', system-ui, sans-serif;
 }
 
