@@ -1,1 +1,0 @@
-{"timestamp":"2026-07-01T09:19:23.393722044","status":400,"error":"Lỗi nghiệp vụ","message":"Could not initialize proxy [org.example.backend.entity.User#71dc3d86-57a4-42d4-957c-20b9ca967033] - no session"}
