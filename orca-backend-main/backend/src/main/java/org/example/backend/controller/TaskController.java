@@ -6,11 +6,13 @@ import org.example.backend.service.AccessControlService;
 import org.example.backend.service.TaskService;
 import org.example.backend.service.PayosPaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import java.util.LinkedHashMap;
@@ -25,6 +27,9 @@ public class TaskController {
     private final TaskService taskService;
     private final AccessControlService accessControlService;
     private final PayosPaymentService payosPaymentService;
+
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String defaultFrontendUrl;
 
     public TaskController(TaskService taskService, AccessControlService accessControlService, PayosPaymentService payosPaymentService) {
         this.taskService = taskService;
@@ -219,14 +224,16 @@ public class TaskController {
     public ResponseEntity<?> payoutSalary(@PathVariable UUID teamId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal User user,
+            HttpServletRequest request) {
         accessControlService.requireTeamAdmin(user, teamId);
         // We get totalSalary from taskService
         Map<String, Object> mockResult = taskService.payoutSalary(teamId, user.getId(), year, month);
         double totalSalary = (double) mockResult.get("totalSalary");
         
+        String baseUrl = getBaseUrl(request, defaultFrontendUrl);
         // Generate PayOS link
-        Map<String, Object> payosResult = payosPaymentService.createSalaryPaymentLink(user, teamId.toString(), (long) totalSalary);
+        Map<String, Object> payosResult = payosPaymentService.createSalaryPaymentLink(user, teamId.toString(), (long) totalSalary, baseUrl);
         
         // Extract order code and url from the PayosPaymentService response (flat: {checkoutUrl, txnRef})
         Long orderCode = null;
@@ -260,5 +267,18 @@ public class TaskController {
         accessControlService.requireTaskModifierAccess(user, id);
         taskService.delete(id);
         return ResponseEntity.ok(Map.of("message", "Đã xóa task"));
+    }
+
+    private String getBaseUrl(HttpServletRequest request, String defaultUrl) {
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.isEmpty()) return origin;
+        String referer = request.getHeader("Referer");
+        if (referer != null && !referer.isEmpty()) {
+            try {
+                java.net.URL url = new java.net.URL(referer);
+                return url.getProtocol() + "://" + url.getHost() + (url.getPort() != -1 ? ":" + url.getPort() : "");
+            } catch (Exception e) {}
+        }
+        return defaultUrl;
     }
 }

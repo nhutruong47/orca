@@ -46,7 +46,7 @@ public class PayosPaymentService {
     }
 
     @Transactional
-    public Map<String, Object> createPaymentLink(User user, String planId) {
+    public Map<String, Object> createPaymentLink(User user, String planId, String baseUrl) {
         Plan plan = findPlan(planId);
         long orderCode = generateUniqueOrderCode();
         String txnRef = String.valueOf(orderCode);
@@ -61,8 +61,8 @@ public class PayosPaymentService {
         transaction.setPaymentMethod("PAYOS");
         paymentRepository.save(transaction);
 
-        String returnUrl = frontendUrl + "/payment-result?txnRef=" + txnRef + "&planId=" + planId;
-        String cancelUrl = frontendUrl + "/upgrade";
+        String returnUrl = baseUrl + "/payment-result?txnRef=" + txnRef + "&planId=" + planId;
+        String cancelUrl = baseUrl + "/upgrade";
 
         CreatePaymentLinkRequest paymentData = CreatePaymentLinkRequest.builder()
                 .orderCode(orderCode)
@@ -88,7 +88,7 @@ public class PayosPaymentService {
     }
 
     @Transactional
-    public Map<String, Object> createSalaryPaymentLink(User user, String teamId, long amount) {
+    public Map<String, Object> createSalaryPaymentLink(User user, String teamId, long amount, String baseUrl) {
         long orderCode = generateUniqueOrderCode();
         String txnRef = String.valueOf(orderCode);
 
@@ -102,8 +102,8 @@ public class PayosPaymentService {
         transaction.setPaymentMethod("PAYOS");
         paymentRepository.save(transaction);
 
-        String returnUrl = frontendUrl + "/payment-result?txnRef=" + txnRef + "&planId=SALARY";
-        String cancelUrl = frontendUrl + "/group/" + teamId;
+        String returnUrl = baseUrl + "/payment-result?txnRef=" + txnRef + "&planId=SALARY";
+        String cancelUrl = baseUrl + "/group/" + teamId;
 
         CreatePaymentLinkRequest paymentData = CreatePaymentLinkRequest.builder()
                 .orderCode(orderCode)

@@ -142,6 +142,8 @@ public class InterGroupOrderService {
             order.setQuantity(dto.getQuantity());
             order.setDeadline(dto.getDeadline());
             transitionTo(order, OrderStatus.RFQ_CREATED, currentUser, "createOrder-team");
+            order.setBuyerViewed(true);
+            order.setSellerViewed(false);
             order.setMaterialSource(dto.getMaterialSource());
             order.setServices(dto.getServices());
             order.setProductType(dto.getProductType());
@@ -196,6 +198,8 @@ public class InterGroupOrderService {
         order.setQuantity(dto.getQuantity());
         order.setDeadline(dto.getDeadline());
         transitionTo(order, OrderStatus.RFQ_CREATED, currentUser, "createOrder-user");
+        order.setBuyerViewed(true);
+        order.setSellerViewed(false);
         order.setMaterialSource(dto.getMaterialSource());
         order.setServices(dto.getServices());
         order.setProductType(dto.getProductType());

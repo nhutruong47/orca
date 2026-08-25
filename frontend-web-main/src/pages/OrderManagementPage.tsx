@@ -345,7 +345,7 @@ export default function OrderManagementPage() {
                 title: manualOrderForm.title.trim(),
                 description: descriptionParts.join('\n'),
                 quantity: Number(manualOrderForm.quantity) || 1,
-                deadline: manualOrderForm.deadline,
+                deadline: manualOrderForm.deadline ? (manualOrderForm.deadline.includes('T') ? manualOrderForm.deadline : `${manualOrderForm.deadline}T23:59:59`) : undefined,
                 contactPhone: manualOrderForm.contactPhone.trim() || undefined,
                 deliveryAddress: manualOrderForm.deliveryAddress.trim() || undefined,
                 deliveryNote: manualOrderForm.deliveryNote.trim() || undefined,
